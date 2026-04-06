@@ -13,8 +13,6 @@ services:
   - type: web
     name: pharmcheck-dashboard
     runtime: static
-    region: frankfurt
-    plan: starter
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
