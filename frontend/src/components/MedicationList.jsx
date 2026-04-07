@@ -1,42 +1,35 @@
-export default function MedicationList({ drugs, onRemove }) {
+export default function MedicationList({ drugs, onRemove, onDrugClick }) {
   if (drugs.length === 0) return null;
 
   return (
-    <div className="mt-4">
-      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
         Zoznam liekov pacienta ({drugs.length})
       </h3>
       <div className="flex flex-wrap gap-2">
         {drugs.map((drug) => (
           <div
             key={drug.id}
-            className="group flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm hover:shadow-md transition-all"
+            className="group flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 hover:border-blue-200 hover:bg-blue-50/50 transition-all"
           >
-            <div>
-              <span className="font-medium text-gray-800 text-sm">
+            <button
+              onClick={() => onDrugClick?.(drug)}
+              className="text-left"
+            >
+              <span className="font-medium text-slate-800 text-sm hover:text-blue-700 transition-colors">
                 {drug.trade_name}
               </span>
-              <span className="text-gray-400 text-xs ml-1.5">
+              <span className="text-slate-400 text-[10px] ml-1.5">
                 {drug.active_substance}
               </span>
-            </div>
+            </button>
             <button
               onClick={() => onRemove(drug.id)}
-              className="ml-1 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              className="ml-1 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
               title="Odstrániť"
             >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>

@@ -16,7 +16,8 @@ def get_db() -> sqlite3.Connection:
 def init_db():
     os.makedirs(DB_PATH.parent, exist_ok=True)
     conn = get_db()
-    conn.executescript("""
+    try:
+        conn.executescript("""
         CREATE TABLE IF NOT EXISTS drugs (
             id INTEGER PRIMARY KEY,
             trade_name TEXT NOT NULL,
@@ -67,5 +68,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_drugs_atc ON drugs(atc_code);
         CREATE INDEX IF NOT EXISTS idx_drugs_substance ON drugs(LOWER(active_substance));
     """)
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()

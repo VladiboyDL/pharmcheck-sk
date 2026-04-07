@@ -90,10 +90,12 @@ def check_interactions(req: InteractionCheckRequest):
                 found_interactions.append(
                     Interaction(
                         drug_a=InteractionDrug(
+                            id=da["id"],
                             trade_name=da["trade_name"],
                             active_substance=da["active_substance"],
                         ),
                         drug_b=InteractionDrug(
+                            id=db_drug["id"],
                             trade_name=db_drug["trade_name"],
                             active_substance=db_drug["active_substance"],
                         ),

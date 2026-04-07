@@ -12,6 +12,19 @@ class Drug(BaseModel):
     form: Optional[str] = None
 
 
+class DrugDetail(BaseModel):
+    id: int
+    trade_name: str
+    active_substance: str
+    atc_code: Optional[str] = None
+    atc_group: Optional[str] = None
+    strength: Optional[str] = None
+    form: Optional[str] = None
+    sukl_code: Optional[str] = None
+    interaction_count: int = 0
+    related_drugs: List[Drug] = []
+
+
 class DrugSearchResult(BaseModel):
     results: List[Drug]
 
@@ -21,6 +34,7 @@ class InteractionCheckRequest(BaseModel):
 
 
 class InteractionDrug(BaseModel):
+    id: int
     trade_name: str
     active_substance: str
 
@@ -53,3 +67,34 @@ class InteractionCheckResponse(BaseModel):
     interactions: List[Interaction]
     safe_pairs: List[SafePair]
     summary: InteractionSummary
+
+
+class AlternativeSuggestion(BaseModel):
+    original_drug: Drug
+    alternative: Drug
+    reason: str
+    interactions_avoided: int
+
+
+class ResolverResponse(BaseModel):
+    suggestions: List[AlternativeSuggestion]
+    original_interaction_count: int
+
+
+class ATCGroup(BaseModel):
+    code: str
+    name: str
+    drug_count: int
+
+
+class ATCBrowseResponse(BaseModel):
+    groups: List[ATCGroup]
+    drugs: List[Drug]
+
+
+class DatabaseStats(BaseModel):
+    total_drugs: int
+    total_interactions: int
+    drugs_with_interactions: int
+    severity_breakdown: dict
+    top_atc_groups: List[ATCGroup]
