@@ -67,6 +67,19 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_interactions_atc_b ON interactions(drug_b_atc);
         CREATE INDEX IF NOT EXISTS idx_drugs_atc ON drugs(atc_code);
         CREATE INDEX IF NOT EXISTS idx_drugs_substance ON drugs(LOWER(active_substance));
+
+        CREATE TABLE IF NOT EXISTS ai_interaction_cache (
+            id INTEGER PRIMARY KEY,
+            substance_a TEXT NOT NULL,
+            substance_b TEXT NOT NULL,
+            has_interaction INTEGER NOT NULL DEFAULT 0,
+            severity TEXT,
+            mechanism TEXT,
+            management TEXT,
+            alternatives TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(substance_a, substance_b)
+        );
     """)
         conn.commit()
     finally:

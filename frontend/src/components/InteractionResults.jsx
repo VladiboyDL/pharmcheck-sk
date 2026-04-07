@@ -9,7 +9,8 @@ export default function InteractionResults({ data, medications, onReset, onDrugC
 
   if (!data) return null;
 
-  const { interactions, safe_pairs, summary } = data;
+  const { interactions, safe_pairs, summary, ai_enabled } = data;
+  const aiCount = interactions.filter((i) => i.source === "ai" || i.source === "ai_cached").length;
 
   const filtered = severityFilter === "all"
     ? interactions
@@ -42,6 +43,14 @@ export default function InteractionResults({ data, medications, onReset, onDrugC
             <div className="text-xs text-slate-400 hidden sm:block">
               {summary.total_pairs_checked} párov
             </div>
+            {ai_enabled && (
+              <div className="flex items-center gap-1.5 text-xs print:hidden">
+                <span className="bg-violet-100 text-violet-700 font-bold px-1.5 py-0.5 rounded text-[9px] border border-violet-200">AI</span>
+                <span className="text-violet-600 font-medium">
+                  {aiCount > 0 ? `${aiCount} nájdených AI` : "aktívne"}
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 print:hidden">
             <button

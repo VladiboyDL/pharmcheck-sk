@@ -3,6 +3,7 @@ from itertools import combinations
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from ..database import get_db
+from ..ai_checker import check_interaction_ai, ANTHROPIC_API_KEY
 from ..models import (
     InteractionCheckRequest,
     InteractionCheckResponse,
@@ -15,8 +16,8 @@ from ..models import (
 router = APIRouter(prefix="/api/interactions", tags=["interactions"])
 
 
-def _find_interaction(db, substance_a: str, substance_b: str) -> dict | None:
-    """Find interaction between two active substances.
+def _find_interaction_db(db, substance_a: str, substance_b: str) -> dict | None:
+    """Find interaction in DDInter database.
     Handles multi-substance drugs (comma-separated) by checking each pair."""
     subs_a = [s.strip().lower() for s in substance_a.split(",")]
     subs_b = [s.strip().lower() for s in substance_b.split(",")]
@@ -41,9 +42,29 @@ def _find_interaction(db, substance_a: str, substance_b: str) -> dict | None:
 
             if row:
                 r = dict(row)
-                # Keep the most severe interaction found
+                r["source"] = "db"
                 if best is None or severity_rank.get(r["severity"], 9) < severity_rank.get(best["severity"], 9):
                     best = r
+
+    return best
+
+
+def _find_interaction_ai(db, substance_a: str, substance_b: str) -> dict | None:
+    """Find interaction using AI. Checks each substance pair for multi-substance drugs."""
+    subs_a = [s.strip().lower() for s in substance_a.split(",")]
+    subs_b = [s.strip().lower() for s in substance_b.split(",")]
+
+    best = None
+    severity_rank = {"Závažná": 0, "Stredná": 1, "Mierna": 2}
+
+    for sa in subs_a:
+        for sb in subs_b:
+            if sa == sb:
+                continue
+            result = check_interaction_ai(sa, sb, db)
+            if result and result.get("has_interaction"):
+                if best is None or severity_rank.get(result.get("severity"), 9) < severity_rank.get(best.get("severity"), 9):
+                    best = result
 
     return best
 
@@ -55,6 +76,7 @@ def check_interactions(req: InteractionCheckRequest):
     if len(req.drug_ids) > 20:
         raise HTTPException(status_code=400, detail="Maximum 20 drugs per check")
 
+    ai_enabled = bool(ANTHROPIC_API_KEY)
     db = get_db()
     try:
         # Fetch all drugs
@@ -80,7 +102,14 @@ def check_interactions(req: InteractionCheckRequest):
             da = drug_map[id_a]
             db_drug = drug_map[id_b]
 
-            interaction = _find_interaction(db, da["active_substance"], db_drug["active_substance"])
+            # Step 1: Check DDInter database
+            interaction = _find_interaction_db(db, da["active_substance"], db_drug["active_substance"])
+
+            # Step 2: If not found in DB and AI is enabled, check with AI
+            if not interaction and ai_enabled:
+                ai_result = _find_interaction_ai(db, da["active_substance"], db_drug["active_substance"])
+                if ai_result and ai_result.get("has_interaction"):
+                    interaction = ai_result
 
             if interaction:
                 sev = interaction["severity"]
@@ -100,9 +129,10 @@ def check_interactions(req: InteractionCheckRequest):
                             active_substance=db_drug["active_substance"],
                         ),
                         severity=sev,
-                        mechanism=interaction["mechanism"],
-                        management=interaction["management"],
-                        alternatives=interaction["alternatives"],
+                        mechanism=interaction.get("mechanism"),
+                        management=interaction.get("management"),
+                        alternatives=interaction.get("alternatives"),
+                        source=interaction.get("source", "db"),
                     )
                 )
             else:
@@ -127,6 +157,7 @@ def check_interactions(req: InteractionCheckRequest):
                 minor=severity_counts["Mierna"],
                 none=len(safe_pairs),
             ),
+            ai_enabled=ai_enabled,
         )
     finally:
         db.close()

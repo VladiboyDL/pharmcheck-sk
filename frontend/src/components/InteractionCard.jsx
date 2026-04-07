@@ -84,6 +84,11 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {interaction.source && interaction.source !== "db" && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 border border-violet-200" title="Interakcia identifikovaná AI">
+              AI
+            </span>
+          )}
           <span className={`${config.badge} text-[10px] font-semibold px-2 py-1 rounded-full`}>
             {config.label}
           </span>

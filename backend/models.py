@@ -46,6 +46,7 @@ class Interaction(BaseModel):
     mechanism: Optional[str] = None
     management: Optional[str] = None
     alternatives: Optional[str] = None
+    source: str = "db"  # "db" = DDInter, "ai" = Claude AI, "ai_cached" = cached AI
 
 
 class SafePair(BaseModel):
@@ -67,6 +68,7 @@ class InteractionCheckResponse(BaseModel):
     interactions: List[Interaction]
     safe_pairs: List[SafePair]
     summary: InteractionSummary
+    ai_enabled: bool = False
 
 
 class AlternativeSuggestion(BaseModel):
