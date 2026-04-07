@@ -2,12 +2,18 @@
 from __future__ import annotations
 import json
 import os
+import time
 import logging
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Rate limiting: max 30 AI calls per minute to control costs
+_call_timestamps: list[float] = []
+MAX_CALLS_PER_MINUTE = 30
+MAX_CALLS_PER_REQUEST = 10  # Max AI calls per single interaction check request
 
 SYSTEM_PROMPT = """Si farmakologický expert. Tvoja úloha je posúdiť liekové interakcie medzi dvoma účinnými látkami.
 
@@ -33,6 +39,14 @@ Pravidlá závažnosti:
 - Mierna: minimálny klinický význam, informačný charakter"""
 
 
+def _rate_limit_ok() -> bool:
+    """Check if we're within rate limits."""
+    now = time.time()
+    # Remove timestamps older than 60 seconds
+    _call_timestamps[:] = [t for t in _call_timestamps if now - t < 60]
+    return len(_call_timestamps) < MAX_CALLS_PER_MINUTE
+
+
 def check_interaction_ai(substance_a: str, substance_b: str, db=None) -> Optional[dict]:
     """Check interaction between two substances using AI.
 
@@ -45,7 +59,7 @@ def check_interaction_ai(substance_a: str, substance_b: str, db=None) -> Optiona
     # Normalize for cache lookup (alphabetical order)
     sa, sb = sorted([substance_a.lower().strip(), substance_b.lower().strip()])
 
-    # Check cache first
+    # Check cache first - cache hits don't count against rate limit
     if db:
         cached = db.execute(
             """SELECT has_interaction, severity, mechanism, management, alternatives
@@ -65,10 +79,17 @@ def check_interaction_ai(substance_a: str, substance_b: str, db=None) -> Optiona
                 "source": "ai_cached",
             }
 
+    # Rate limit check
+    if not _rate_limit_ok():
+        logger.warning("AI rate limit reached, skipping")
+        return None
+
     # Call Claude
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        _call_timestamps.append(time.time())
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -81,7 +102,10 @@ def check_interaction_ai(substance_a: str, substance_b: str, db=None) -> Optiona
         )
 
         text = response.content[0].text.strip()
-        # Parse JSON from response
+        # Parse JSON - handle markdown code blocks
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
         result = json.loads(text)
 
         # Cache the result
@@ -119,10 +143,15 @@ def check_interaction_ai(substance_a: str, substance_b: str, db=None) -> Optiona
 
 
 def check_interactions_batch(pairs: list[tuple[str, str]], db=None) -> dict:
-    """Check multiple substance pairs. Returns dict keyed by (sa, sb) tuples."""
+    """Check multiple substance pairs with rate limiting. Returns dict keyed by (sa, sb) tuples."""
     results = {}
+    calls = 0
     for sa, sb in pairs:
+        if calls >= MAX_CALLS_PER_REQUEST:
+            break
         result = check_interaction_ai(sa, sb, db)
+        if result and result.get("source") in ("ai", None):
+            calls += 1  # Only count actual API calls, not cache hits
         if result:
             key = (sa.lower().strip(), sb.lower().strip())
             results[key] = result
