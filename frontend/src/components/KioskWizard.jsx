@@ -40,6 +40,11 @@ export default function KioskWizard({ onSessionResult }) {
 
   live.current = { phase, identity, groups, groupIndex, answers, scenario, result };
 
+  // The tools are registered once at connect time, so they must never close over
+  // render-scoped functions — that is exactly how zapis_odpoved ended up calling a
+  // startCheck that still saw identity as null.
+  const handlers = useRef({});
+
   useEffect(() => {
     getScenarios()
       .then((d) => {
@@ -138,13 +143,6 @@ export default function KioskWizard({ onSessionResult }) {
     setPhase("review");
   }
 
-  // Voice mode is announced once; from then on the agent reads the screen through
-  // stav_obrazovky rather than being pushed narration it might get ahead of.
-  useEffect(() => {
-    if (mode !== "voice" || voice.status !== "live") return;
-    voice.say(`Pacient je na kroku ${phase}.`);
-  }, [phase, mode, voice.status]);
-
   /**
    * What the agent may read and do.
    *
@@ -173,9 +171,7 @@ export default function KioskWizard({ onSessionResult }) {
           state.moznosti = group.questions.flatMap((q) => q.options.map((o) => o.label));
         }
         if (s.scenario) {
-          state.recept = (s.scenario.preview ?? []).map(
-            (i) => `${i.trade_name} — ${i.schedule}`
-          );
+          state.recept = (s.scenario.preview ?? []).map((i) => `${i.trade_name} — ${i.schedule}`);
         }
         if (s.result) {
           state.vysledok = s.result.verdict_label;
@@ -190,42 +186,81 @@ export default function KioskWizard({ onSessionResult }) {
         return JSON.stringify(state);
       },
 
-      pokracuj: async () => {
-        const s = live.current;
-        if (s.phase === "welcome") setPhase("identity");
-        else if (s.phase === "identity") identityControls.current?.next?.();
-        else if (s.phase === "questions") nextGroup();
-        else if (s.phase === "review") await showResult();
-        else if (s.phase === "result") return "Pacient je na poslednej obrazovke.";
-        return "Posunuté.";
-      },
+      pokracuj: async () => handlers.current.advance(),
 
-      zapis_odpoved: async ({ lieky }) => {
-        const s = live.current;
-        const group = s.groups?.[s.groupIndex];
-        if (!group) return "Momentálne nie sme na otázke.";
-
-        const wanted = String(lieky || "")
-          .split(";")
-          .map((x) => x.trim().toLowerCase())
-          .filter(Boolean);
-
-        const merged = { ...s.answers };
-        for (const q of group.questions) {
-          const picked = q.options
-            .filter((o) => !o.exclusive && wanted.some((w) => o.label.toLowerCase().includes(w)))
-            .map((o) => o.id);
-          const none = q.options.find((o) => o.exclusive);
-          merged[q.id] = picked.length ? picked : none ? [none.id] : [];
-        }
-        setAnswers(merged);
-        startCheck(merged);
-        setPhase("review");
-        return wanted.length ? `Zapísané: ${wanted.join(", ")}.` : "Zapísané, že neužíva nič iné.";
-      },
+      zapis_odpoved: async ({ lieky }) => handlers.current.record(lieky),
     }),
     []
   );
+
+  // Rebuilt every render, so the tools always act on current state.
+  handlers.current = {
+    advance: () => {
+      if (phase === "welcome") setPhase("identity");
+      else if (phase === "identity") identityControls.current?.next?.();
+      else if (phase === "questions") nextGroup();
+      else if (phase === "review") showResult();
+      else return "Pacient je na poslednej obrazovke, ďalej to nejde.";
+      return "Posunuté na ďalší krok.";
+    },
+
+    record: (lieky) => {
+      const group = groups[groupIndex];
+      if (!group) return "Pacient práve nie je na otázke, nedá sa nič zapísať.";
+
+      // The patient speaks freely — "omega tri mastné kyseliny" has to find the option
+      // labelled "Rybí olej, omega-3". Whole-phrase matching never would.
+      const spoken = String(lieky || "")
+        .split(/[;,]/)
+        .map((x) => x.trim().toLowerCase())
+        .filter(Boolean);
+      // "Vitamín D" must not match the option "Vitamín K" — the letter is the whole
+      // distinction, and K interacts with warfarin where D does not. So the letter is
+      // folded into the token before anything is compared.
+      const words = (text) =>
+        text
+          .toLowerCase()
+          .replace(/vitam[ií]n\s+([a-k])\b/g, "vitamin$1")
+          .split(/[^a-záäčďéíĺľňóôŕšťúýž0-9]+/)
+          .filter((w) => w.length > 2);
+
+      const merged = { ...answers };
+      const matchedLabels = [];
+      const usedPhrases = new Set();
+
+      for (const q of group.questions) {
+        const picked = [];
+        for (const option of q.options) {
+          if (option.exclusive) continue;
+          const optionWords = words(option.label);
+          const hit = spoken.find((phrase) =>
+            words(phrase).some((w) => optionWords.some((ow) => ow.includes(w) || w.includes(ow)))
+          );
+          if (hit) {
+            picked.push(option.id);
+            matchedLabels.push(option.label);
+            usedPhrases.add(hit);
+          }
+        }
+        const none = q.options.find((o) => o.exclusive);
+        merged[q.id] = picked.length ? picked : none ? [none.id] : [];
+      }
+
+      setAnswers(merged);
+      startCheck(merged);
+      setPhase("review");
+
+      const unmatched = spoken.filter((p) => !usedPhrases.has(p));
+      if (!spoken.length) return "Zapísané, že pacient neužíva nič okrem receptu. Teraz je na kroku recept.";
+      let msg = matchedLabels.length
+        ? `Zapísané: ${matchedLabels.join(", ")}.`
+        : "Nič z povedaného nezodpovedá možnostiam na obrazovke.";
+      if (unmatched.length) {
+        msg += ` Toto v zozname nemám: ${unmatched.join(", ")} — povedz pacientovi, že to odovzdáš lekárnikovi.`;
+      }
+      return msg + " Teraz je pacient na kroku recept.";
+    },
+  };
 
   const stepIndex = useMemo(
     () => ({ welcome: 0, identity: 1, questions: 2, review: 3, result: 4 }[phase] ?? 0),
