@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import sqlite3
 import sys
 import threading
@@ -40,7 +41,13 @@ Odpovedaj VÝHRADNE vo formáte JSON, bez akéhokoľvek iného textu:
 }
 
 Závažnosť interakcie ti je zadaná — rešpektuj ju a prispôsob jej tón odporúčania.
-Píš po slovensky, odborne ale zrozumiteľne. Bez markdown formátovania."""
+Píš po slovensky, odborne ale zrozumiteľne. Bez markdown formátovania.
+
+JAZYKOVÉ PRAVIDLÁ — dodrž ich striktne:
+- Používaj VÝHRADNE slovenskú abecedu. Nikdy nepouži azbuku ani iné písmo.
+- Názvy liečiv skloňuj po slovensky: rosuvastatínom, pravastatínom, warfarínom.
+- Nepoužívaj anglicizmy typu "prescribujúci" — správne je "predpisujúci lekár".
+- Skontroluj gramatickú zhodu podstatných mien a prídavných mien."""
 
 
 def demo_plan(conn: sqlite3.Connection):
@@ -111,6 +118,20 @@ def build_plan(conn: sqlite3.Connection, major_top: int, moderate_top: int, limi
     return plan[:limit] if limit else plan
 
 
+# Generation occasionally leaks Cyrillic characters into Slovak drug-name inflections
+# ("pravastatiном"). Visible garbage in front of a pharmacist, so reject and retry.
+BAD_SCRIPT = re.compile(r"[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF]")
+
+
+def _clean(data: dict) -> bool:
+    """True when every field is plausible Slovak prose."""
+    for key in ("mechanism", "management", "alternatives"):
+        value = (data.get(key) or "").strip()
+        if BAD_SCRIPT.search(value):
+            return False
+    return bool((data.get("mechanism") or "").strip())
+
+
 def worker(q: queue.Queue, results: queue.Queue, api_key: str, stop: threading.Event):
     import anthropic
 
@@ -121,32 +142,47 @@ def worker(q: queue.Queue, results: queue.Queue, api_key: str, stop: threading.E
         except queue.Empty:
             return
         try:
-            resp = client.messages.create(
-                model=MODEL,
-                max_tokens=500,
-                system=SYSTEM,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Účinné látky: {row['drug_a']} + {row['drug_b']}\n"
-                            f"Závažnosť interakcie: {row['severity']}"
-                        ),
-                    }
-                ],
-            )
-            text = resp.content[0].text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            data = json.loads(text)
-            results.put(
-                (
-                    row["id"],
-                    data.get("mechanism", "").strip(),
-                    data.get("management", "").strip(),
-                    data.get("alternatives", "").strip(),
+            data = None
+            for attempt in range(3):
+                resp = client.messages.create(
+                    model=MODEL,
+                    max_tokens=500,
+                    system=SYSTEM,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Účinné látky: {row['drug_a']} + {row['drug_b']}\n"
+                                f"Závažnosť interakcie: {row['severity']}"
+                                + (
+                                    "\n\nPREDCHÁDZAJÚCI POKUS OBSAHOVAL CUDZIE PÍSMO. "
+                                    "Píš výhradne slovenskou abecedou."
+                                    if attempt
+                                    else ""
+                                )
+                            ),
+                        }
+                    ],
                 )
-            )
+                text = resp.content[0].text.strip()
+                if text.startswith("```"):
+                    text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                candidate = json.loads(text)
+                if _clean(candidate):
+                    data = candidate
+                    break
+
+            if data is None:
+                results.put(("ERROR", row["id"], f"{row['drug_a']}+{row['drug_b']}", "neplatný jazyk po 3 pokusoch"))
+            else:
+                results.put(
+                    (
+                        row["id"],
+                        data.get("mechanism", "").strip(),
+                        data.get("management", "").strip(),
+                        data.get("alternatives", "").strip(),
+                    )
+                )
         except Exception as e:  # keep going — a single bad pair must not kill the run
             results.put(("ERROR", row["id"], f"{row['drug_a']}+{row['drug_b']}", str(e)[:120]))
         finally:
@@ -164,10 +200,21 @@ def main() -> int:
                     help="only the pairs the six demo scenarios surface (~1 min)")
     args = ap.parse_args()
 
+    # Reuse the backend's .env loader so the key can live in backend/.env rather
+    # than the shell, exactly as it does when the API runs locally.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        from backend.ai_checker import _load_dotenv
+
+        _load_dotenv()
+    except Exception:
+        pass
+
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key and not args.dry_run:
         print("ANTHROPIC_API_KEY nie je nastavený.", file=sys.stderr)
         print("  export ANTHROPIC_API_KEY=sk-ant-...", file=sys.stderr)
+        print("  alebo ho zapíšte do backend/.env", file=sys.stderr)
         return 1
 
     conn = sqlite3.connect(str(DB_PATH))
