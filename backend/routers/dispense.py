@@ -176,12 +176,33 @@ def _interaction_row(db, sub_a: str, sub_b: str) -> tuple[dict | None, str, list
 
 @router.get("/scenarios")
 def scenarios():
-    """The clinical situations available in the demo, all for the same patient."""
-    return {
-        "scenarios": [
-            {k: v for k, v in s.items() if k != "profile"} for s in DEMO_SCENARIOS.values()
-        ]
-    }
+    """The clinical situations available in the demo, all for the same patient.
+
+    Each carries a readable preview built by the real parser. The kiosk shows the
+    prescription before the check finishes, and "EUTHYROX 75 ug tbl 1-0-0" is the
+    prescriber's shorthand — not something to put in front of a patient.
+    """
+    db = get_db()
+    try:
+        out = []
+        for scenario in DEMO_SCENARIOS.values():
+            items, _ = resolve(db, scenario["text"])
+            out.append(
+                {
+                    **{k: v for k, v in scenario.items() if k != "profile"},
+                    "preview": [
+                        {
+                            "trade_name": it["trade_name"],
+                            "strength": dosing_plan.strength_text(it),
+                            "schedule": dosing_plan.schedule_text(it),
+                        }
+                        for it in items
+                    ],
+                }
+            )
+        return {"scenarios": out}
+    finally:
+        db.close()
 
 
 @router.get("/scenarios/{scenario_id}")
@@ -362,6 +383,7 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
                     "Preberte to s lekárom pri najbližšej návšteve — liek preto vysadzovať netreba."
                 ),
                 "notify_prescriber": ix["severity"] == "Závažná",
+                "patient_visible": ix["severity"] == "Závažná",
                 "say": ix.get("management") or "",
                 "severity": ix["severity"],
             }
@@ -379,6 +401,7 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
                     "kind": "ask",
                     "ask": _ask_for(f, item["trade_name"]),
                     "patient": _patient_text_for(f, item["trade_name"]),
+                    "patient_visible": f.code in PATIENT_VISIBLE_CODES,
                     "say": f.action or "",
                     "severity": "Upozornenie",
                 }
@@ -395,6 +418,7 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
                 "kind": "ask",
                 "ask": _ask_for(f, ", ".join(f.drugs)),
                 "patient": _patient_text_for(f, ", ".join(f.drugs)),
+                "patient_visible": f.code in PATIENT_VISIBLE_CODES,
                 "say": f.action or "",
                 "severity": "Upozornenie",
             }
@@ -405,6 +429,24 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
     weight = {"Závažná": 0, "Upozornenie": 1, "Stredná": 2}
     script.sort(key=lambda line: weight.get(line.get("severity"), 3))
     return script
+
+
+# Only findings a patient can act on with their own body reach the kiosk. Everything
+# else is for the pharmacist: a data gap in the interaction set, or a count of how
+# many medicines someone takes, tells a patient nothing and only frightens them.
+# An allowlist rather than a blocklist — a new finding code stays out until someone
+# has written patient-facing words for it.
+PATIENT_VISIBLE_CODES = frozenset({
+    "DUPLICATE",
+    "BLEEDING_BURDEN",
+    "SEROTONIN_BURDEN",
+    "FALL_RISK",
+    "GERIATRIC",
+    "QT",
+    "RENAL_REDUCE",
+    "RENAL_CAUTION",
+    "NEAR_MAX_DOSE",
+})
 
 
 def _patient_text_for(finding, subject: str) -> str:

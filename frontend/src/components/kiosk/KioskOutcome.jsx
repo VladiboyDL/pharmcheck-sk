@@ -23,7 +23,8 @@ export default function KioskOutcome({ data, onRestart }) {
   const cards = useMemo(() => {
     const out = [];
     const counselStep = (data.next_steps ?? []).find((s) => s.kind === "counsel");
-    for (const line of (counselStep?.script ?? []).slice(0, 2)) {
+    const forPatient = (counselStep?.script ?? []).filter((l) => l.patient_visible);
+    for (const line of forPatient.slice(0, 2)) {
       out.push({
         kind: "advice",
         topic: line.topic,

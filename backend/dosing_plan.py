@@ -72,7 +72,7 @@ TIMING: dict[str, dict] = {
 }
 
 
-def _schedule_text(item: dict) -> str:
+def schedule_text(item: dict) -> str:
     """1-0-1 becomes a sentence."""
     if item.get("weekly"):
         return "Raz týždenne, vždy v ten istý deň."
@@ -90,13 +90,15 @@ def _schedule_text(item: dict) -> str:
                   r"(?:\s*-\s*(\d+(?:[.,]\d+)?|\d/\d))?", raw)
     if m:
         parts = [g for g in m.groups() if g is not None]
-        pieces = []
-        for slot, value in zip(SLOT_NAMES, parts):
-            amount = _amount_text(value)
-            if amount:
-                pieces.append(f"{slot} {amount}")
-        if pieces:
-            return (", ".join(pieces)).capitalize() + "."
+        taken = [(slot, _amount_text(v)) for slot, v in zip(SLOT_NAMES, parts) if _amount_text(v)]
+        if taken:
+            # "Ráno a večer jedna tableta" reads better than saying the amount twice.
+            amounts = {amount for _, amount in taken}
+            if len(amounts) == 1 and len(taken) > 1:
+                slots = [slot for slot, _ in taken]
+                joined = ", ".join(slots[:-1]) + " a " + slots[-1]
+                return f"{joined} {taken[0][1]}".capitalize() + "."
+            return ", ".join(f"{slot} {amount}" for slot, amount in taken).capitalize() + "."
 
     if freq:
         return f"{int(units)}× denne, rozdelene počas dňa." if units >= 2 else "Raz denne."
@@ -141,7 +143,8 @@ def build(items: list[dict]) -> list[dict]:
             {
                 "trade_name": item["trade_name"],
                 "substance": item.get("active_substance"),
-                "schedule": _schedule_text(item),
+                "strength": strength_text(item),
+                "schedule": schedule_text(item),
                 "daily_total": (
                     f"{item['daily_dose_mg']:g} mg denne" if item.get("daily_dose_mg") else ""
                 ),
@@ -239,3 +242,22 @@ def as_icalendar(plan: list[dict], start_date: str, audit_id: str) -> str:
         ]
     lines.append("END:VCALENDAR")
     return "\r\n".join(lines)
+
+
+def strength_text(item: dict) -> str:
+    """Strength for a patient, in the unit the box uses.
+
+    A 75 microgram tablet is "75 µg", never "0.075 mg" — and when the trade name
+    already carries the strength, repeating it just adds noise.
+    """
+    mg = item.get("strength_mg")
+    if not mg:
+        return ""
+    label = f"{mg * 1000:g} µg" if mg < 1 else f"{mg:g} mg"
+
+    import re
+
+    name = (item.get("trade_name") or "").lower()
+    if re.search(r"\d\s*(mg|g|mcg|µg|ug)\b", name):
+        return ""
+    return label

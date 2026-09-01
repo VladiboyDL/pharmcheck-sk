@@ -223,18 +223,21 @@ export default function KioskWizard({ onSessionResult }) {
                 <Title sub="Toto vám predpísal lekár. Kontrolujeme to spolu s tým, čo ste mi povedali.">
                   Váš recept
                 </Title>
-                <ul className="mt-7 space-y-2">
-                  {(scenario?.text ?? "")
-                    .split("\n")
-                    .filter(Boolean)
-                    .map((line, n) => (
-                      <li
-                        key={n}
-                        className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3.5 text-slate-200 text-base"
-                      >
-                        {line.trim()}
-                      </li>
-                    ))}
+                <ul className="mt-7 space-y-2.5">
+                  {(scenario?.preview ?? []).map((item) => (
+                    <li
+                      key={item.trade_name}
+                      className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3.5"
+                    >
+                      <p className="text-slate-100 text-base font-medium leading-tight">
+                        {item.trade_name}
+                        {item.strength && (
+                          <span className="text-slate-500 font-normal"> · {item.strength}</span>
+                        )}
+                      </p>
+                      <p className="text-cyan-300 text-sm mt-0.5">{item.schedule}</p>
+                    </li>
+                  ))}
                 </ul>
               </div>
             </Screen>
