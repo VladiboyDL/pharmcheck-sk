@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..patients import get_patient, list_patients
+from ..patients import get_patient, list_patients, primary_patient
 
 router = APIRouter(prefix="/api/identity", tags=["identity"])
 
@@ -35,9 +35,10 @@ class BiometricRequest(BaseModel):
 
 @router.get("/cards")
 def demo_cards():
-    """The cards available to tap in the demo."""
+    """The card available to tap. One patient: whoever is presenting."""
     return {
         "simulated": True,
+        "primary_card": primary_patient()["card_id"],
         "cards": [
             {
                 "card_id": p["card_id"],

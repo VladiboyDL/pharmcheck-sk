@@ -49,27 +49,18 @@ export default function KioskIdentity({ onDone }) {
   }
 
   if (stage === "card" || stage === "reading") {
+    const card = cards[0];
     return (
       <Screen
         footer={
-          <div>
-            <p className="text-center text-[11px] uppercase tracking-wider text-slate-600 mb-3">
-              Demo — vyberte pacienta
-            </p>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {cards.map((c) => (
-                <button
-                  key={c.card_id}
-                  disabled={stage === "reading"}
-                  onClick={() => tapCard(c.card_id)}
-                  className="rounded-xl border border-slate-800 bg-slate-900/60 hover:border-cyan-700 disabled:opacity-40 px-3 py-2.5 text-left transition-colors"
-                >
-                  <span className="block text-sm text-slate-200">{c.name}</span>
-                  <span className="block text-[11px] text-slate-500">{c.age} rokov</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <BigButton
+            onClick={() => card && tapCard(card.card_id)}
+            disabled={!card || stage === "reading"}
+            tone="ghost"
+            full
+          >
+            {stage === "reading" ? "Načítavam…" : "Simulovať priloženie karty"}
+          </BigButton>
         }
       >
         <div className="flex flex-col items-center">

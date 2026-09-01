@@ -153,9 +153,9 @@ export default function IdentityGate({ onVerified, onReset }) {
 
             <div className="mt-2 pt-4 border-t border-slate-800">
               <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
-                Demo karty — kliknutím simulujete priloženie
+                Kliknutím simulujete priloženie karty
               </p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2">
                 {cards.map((c) => (
                   <button
                     key={c.card_id}

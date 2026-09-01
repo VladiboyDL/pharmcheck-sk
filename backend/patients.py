@@ -1,38 +1,28 @@
 """Demo patient registry — simulates a health-insurance card (eID/EHIC) lookup.
 
+The demo is presented live with a real camera pointed at the presenter, so there is
+exactly one patient: the presenter. Scanning a 36-year-old man's face and announcing
+a 98 % match against a 78-year-old woman is the fastest way to lose a room.
+
+The clinical variety lives in the SCENARIOS instead. Each one overlays a plausible
+medical profile onto the same person — renal function, chronic conditions, weight —
+so the engine gets its edge cases without the identity having to lie.
+
 In production this layer would call the Slovak eZdravie / NCZI patient index and the
-insurer's photo service. For the demo everything is local and deterministic so the
-flow works offline.
+insurer's photo service. For the demo everything is local and deterministic.
 """
 from __future__ import annotations
 
+# The presenter. Demographics are demo values — edit here, nowhere else.
+PRIMARY_CARD = "SK8909174023"
+
 DEMO_PATIENTS: dict[str, dict] = {
-    "SK7154120987": {
-        "card_id": "SK7154120987",
-        "name": "Mária Kováčová",
-        "birth_id_masked": "715412/****",
-        "birth_date": "1971-05-12",
-        "age": 78,
-        "sex": "F",
-        "weight_kg": 58,
-        "height_cm": 162,
-        "egfr": 38,
-        "hepatic_impairment": False,
-        "pregnant": False,
-        "breastfeeding": False,
-        "allergies": ["penicilín"],
-        "insurer": "Všeobecná zdravotná poisťovňa",
-        "insurer_code": "25",
-        "chronic": ["Fibrilácia predsiení", "Chronická obličková choroba G3b", "Artróza"],
-        "photo_seed": "maria",
-        "biometric_reference": True,
-    },
-    "SK9203114455": {
-        "card_id": "SK9203114455",
-        "name": "Peter Novák",
-        "birth_id_masked": "920311/****",
-        "birth_date": "1992-03-11",
-        "age": 34,
+    PRIMARY_CARD: {
+        "card_id": PRIMARY_CARD,
+        "name": "Vladimír Rovčanin",
+        "birth_id_masked": "890917/****",
+        "birth_date": "1989-09-17",
+        "age": 36,
         "sex": "M",
         "weight_kg": 84,
         "height_cm": 181,
@@ -41,94 +31,12 @@ DEMO_PATIENTS: dict[str, dict] = {
         "pregnant": False,
         "breastfeeding": False,
         "allergies": [],
-        "insurer": "Dôvera zdravotná poisťovňa",
-        "insurer_code": "24",
-        "chronic": ["Depresívna porucha", "Chronická bolesť chrbta"],
-        "photo_seed": "peter",
-        "biometric_reference": True,
-    },
-    "SK9655087723": {
-        "card_id": "SK9655087723",
-        "name": "Zuzana Horváthová",
-        "birth_id_masked": "965508/****",
-        "birth_date": "1996-05-08",
-        "age": 29,
-        "sex": "F",
-        "weight_kg": 71,
-        "height_cm": 168,
-        "egfr": 104,
-        "hepatic_impairment": False,
-        "pregnant": True,
-        "pregnancy_week": 26,
-        "breastfeeding": False,
-        "allergies": [],
-        "insurer": "Union zdravotná poisťovňa",
-        "insurer_code": "27",
-        "chronic": ["Gravidita — 26. týždeň"],
-        "photo_seed": "zuzana",
-        "biometric_reference": True,
-    },
-    "SK5812093366": {
-        "card_id": "SK5812093366",
-        "name": "Ján Baláž",
-        "birth_id_masked": "581209/****",
-        "birth_date": "1958-12-09",
-        "age": 67,
-        "sex": "M",
-        "weight_kg": 79,
-        "height_cm": 174,
-        "egfr": 62,
-        "hepatic_impairment": False,
-        "pregnant": False,
-        "breastfeeding": False,
-        "allergies": [],
-        "insurer": "Všeobecná zdravotná poisťovňa",
-        "insurer_code": "25",
-        "chronic": ["Reumatoidná artritída", "Hypertenzia"],
-        "photo_seed": "jan",
-        "biometric_reference": True,
-    },
-    "SK8407224411": {
-        "card_id": "SK8407224411",
-        "name": "Eva Šimonová",
-        "birth_id_masked": "840722/****",
-        "birth_date": "1984-07-22",
-        "age": 41,
-        "sex": "F",
-        "weight_kg": 66,
-        "height_cm": 170,
-        "egfr": 98,
-        "hepatic_impairment": False,
-        "pregnant": False,
-        "breastfeeding": False,
-        "allergies": [],
-        "insurer": "Dôvera zdravotná poisťovňa",
-        "insurer_code": "24",
-        "chronic": ["Hypotyreóza"],
-        "photo_seed": "eva",
-        "biometric_reference": True,
-    },
-    "SK1409116688": {
-        "card_id": "SK1409116688",
-        "name": "Tomáš Kováč",
-        "birth_id_masked": "140911/****",
-        "birth_date": "2014-09-11",
-        "age": 11,
-        "sex": "M",
-        "weight_kg": 34,
-        "height_cm": 143,
-        "egfr": 112,
-        "hepatic_impairment": False,
-        "pregnant": False,
-        "breastfeeding": False,
-        "allergies": [],
         "insurer": "Všeobecná zdravotná poisťovňa",
         "insurer_code": "25",
         "chronic": [],
-        "guardian": "Mária Kováčová",
-        "photo_seed": "tomas",
-        "biometric_reference": False,
-        "biometric_note": "Maloletý pacient — biometria sa neoveruje, vyžaduje sa zákonný zástupca.",
+        "photo_seed": "vlad",
+        "biometric_reference": True,
+        "primary": True,
     },
 }
 
@@ -137,5 +45,17 @@ def get_patient(card_id: str) -> dict | None:
     return DEMO_PATIENTS.get((card_id or "").strip().upper())
 
 
+def primary_patient() -> dict:
+    return DEMO_PATIENTS[PRIMARY_CARD]
+
+
 def list_patients() -> list[dict]:
     return list(DEMO_PATIENTS.values())
+
+
+def with_profile(patient: dict, profile: dict | None) -> dict:
+    """Overlay a scenario's clinical profile onto the identity."""
+    merged = dict(patient)
+    if profile:
+        merged.update(profile)
+    return merged

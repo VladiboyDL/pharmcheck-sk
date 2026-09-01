@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import KioskIdentity from "./kiosk/KioskIdentity";
 import KioskOutcome from "./kiosk/KioskOutcome";
 import { Screen, Title, BigButton, Rail } from "./kiosk/KioskShell";
-import { getIntakeQuestions, getScenario, verifyDispense } from "../api/client";
+import { getIntakeQuestions, getScenarios, verifyDispense } from "../api/client";
 
 /**
  * The patient-facing side of the same engine the pharmacist console runs on.
@@ -16,21 +16,32 @@ export default function KioskWizard({ onSessionResult }) {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [qIndex, setQIndex] = useState(0);
-  const [scenario, setScenario] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
+  const [scenarioId, setScenarioId] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const answersRef = useRef({});
 
-  // Prescription and questions are fetched the moment identity is known, so the
-  // patient is answering questions while the network work already happened.
+  useEffect(() => {
+    getScenarios()
+      .then((d) => {
+        setScenarios(d.scenarios);
+        setScenarioId((id) => id ?? d.scenarios[0]?.id ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Questions are fetched the moment identity is known, so the patient is answering
+  // while the network work has already happened.
   useEffect(() => {
     const cardId = identity?.patient?.card_id;
     if (!cardId) return;
-    getScenario(cardId).then(setScenario).catch(() => {});
-    getIntakeQuestions(cardId)
+    getIntakeQuestions(cardId, scenarioId)
       .then((d) => setQuestions(d.questions))
       .catch(() => setQuestions([]));
-  }, [identity?.patient?.card_id]);
+  }, [identity?.patient?.card_id, scenarioId]);
+
+  const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
 
   useEffect(() => {
     if (phase !== "greet") return;
@@ -48,6 +59,7 @@ export default function KioskWizard({ onSessionResult }) {
           prescriptionText: scenario?.text ?? "",
           identityVerified: identity.biometric?.verified === true,
           intake: answersRef.current,
+          scenario: scenarioId,
         }),
         // A verdict in 8 ms reads as "it did not look". Give the reassurance a beat.
         new Promise((r) => setTimeout(r, 2100)),
@@ -99,7 +111,6 @@ export default function KioskWizard({ onSessionResult }) {
     setAnswers({});
     answersRef.current = {};
     setQIndex(0);
-    setScenario(null);
     setResult(null);
     setError(null);
   }
@@ -108,7 +119,36 @@ export default function KioskWizard({ onSessionResult }) {
     <div className="mx-auto max-w-2xl">
       <div className="rounded-3xl border border-slate-800 bg-slate-950 px-6 sm:px-10 py-8 shadow-2xl">
         {phase === "welcome" && (
-          <Screen footer={<BigButton onClick={() => setPhase("identity")} full>Začať</BigButton>}>
+          <Screen
+            footer={
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-dashed border-slate-700 p-4">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
+                    Demo — vyberte klinickú situáciu
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {scenarios.map((sc) => (
+                      <button
+                        key={sc.id}
+                        onClick={() => setScenarioId(sc.id)}
+                        className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                          sc.id === scenarioId
+                            ? "border-cyan-600 bg-cyan-950/40"
+                            : "border-slate-800 bg-slate-900/50 hover:border-slate-600"
+                        }`}
+                      >
+                        <span className="block text-sm text-slate-100">{sc.label}</span>
+                        <span className="block text-[11px] text-slate-500">{sc.subtitle}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <BigButton onClick={() => setPhase("identity")} disabled={!scenarioId} full>
+                  Začať
+                </BigButton>
+              </div>
+            }
+          >
             <div className="text-center">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 grid place-items-center mx-auto mb-7">
                 <svg className="w-8 h-8 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">

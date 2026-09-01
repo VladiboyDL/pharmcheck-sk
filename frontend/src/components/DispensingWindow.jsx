@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import IdentityGate from "./IdentityGate";
 import IntakeInterview from "./IntakeInterview";
 import DispenseResult from "./DispenseResult";
-import { getScenario, verifyDispense } from "../api/client";
+import { getScenarios, verifyDispense } from "../api/client";
 
 /**
  * The dispensing window: identity → prescription → verification decision.
@@ -10,7 +10,8 @@ import { getScenario, verifyDispense } from "../api/client";
  */
 export default function DispensingWindow({ onSessionResult }) {
   const [identity, setIdentity] = useState(null);
-  const [scenario, setScenario] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
+  const [scenarioId, setScenarioId] = useState(null);
   const [text, setText] = useState("");
   const [intakeAnswers, setIntakeAnswers] = useState({});
   const [result, setResult] = useState(null);
@@ -20,14 +21,24 @@ export default function DispensingWindow({ onSessionResult }) {
   const identityOk = identity?.biometric?.verified === true;
 
   useEffect(() => {
-    if (!identity?.patient?.card_id) return;
-    getScenario(identity.patient.card_id)
-      .then((s) => {
-        setScenario(s);
-        setText(s?.text ?? "");
+    getScenarios()
+      .then((d) => {
+        setScenarios(d.scenarios);
+        if (!scenarioId && d.scenarios[0]) {
+          setScenarioId(d.scenarios[0].id);
+          setText(d.scenarios[0].text);
+        }
       })
       .catch(() => {});
-  }, [identity?.patient?.card_id]);
+  }, []);
+
+  const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
+
+  function pickScenario(sc) {
+    setScenarioId(sc.id);
+    setText(sc.text);
+    setIntakeAnswers(sc.suggested_intake ?? {});
+  }
 
   async function handleVerify() {
     setLoading(true);
@@ -38,6 +49,7 @@ export default function DispensingWindow({ onSessionResult }) {
         prescriptionText: text,
         identityVerified: identityOk,
         intake: intakeAnswers,
+        scenario: scenarioId,
       });
       setResult(data);
       onSessionResult?.(data);
@@ -50,8 +62,8 @@ export default function DispensingWindow({ onSessionResult }) {
 
   function fullReset() {
     setIdentity(null);
-    setScenario(null);
-    setText("");
+    setText(scenarios[0]?.text ?? "");
+    setScenarioId(scenarios[0]?.id ?? null);
     setIntakeAnswers({});
     setResult(null);
     setError(null);
@@ -89,12 +101,31 @@ export default function DispensingWindow({ onSessionResult }) {
         </div>
 
         <div className="p-5">
-          {scenario && (
-            <p className="mb-3 text-[11px] text-slate-500">
-              Scenár: <span className="text-slate-300">{scenario.label}</span> — text receptu môžete
-              ľubovoľne upraviť.
+          <div className="mb-4">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              Demo — klinická situácia toho istého pacienta
             </p>
-          )}
+            <div className="flex flex-wrap gap-1.5">
+              {scenarios.map((sc) => (
+                <button
+                  key={sc.id}
+                  onClick={() => pickScenario(sc)}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                    sc.id === scenarioId
+                      ? "border-cyan-700 bg-cyan-950/50 text-cyan-200"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600"
+                  }`}
+                >
+                  {sc.label}
+                </button>
+              ))}
+            </div>
+            {scenario && (
+              <p className="mt-2 text-[11px] text-slate-500">
+                {scenario.subtitle} — text receptu môžete ľubovoľne upraviť.
+              </p>
+            )}
+          </div>
 
           <textarea
             value={text}
@@ -114,6 +145,7 @@ export default function DispensingWindow({ onSessionResult }) {
 
       <IntakeInterview
         cardId={identity?.patient?.card_id}
+        scenarioId={scenarioId}
         value={intakeAnswers}
         onChange={setIntakeAnswers}
         disabled={!identity}

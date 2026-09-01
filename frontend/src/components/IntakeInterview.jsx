@@ -8,16 +8,16 @@ import { getIntakeQuestions } from "../api/client";
  * from what is missing from it — an Ibalgin bought the same morning, ľubovník for
  * low mood, a second specialist's script. Tap answers, no typing.
  */
-export default function IntakeInterview({ cardId, value, onChange, disabled }) {
+export default function IntakeInterview({ cardId, scenarioId, value, onChange, disabled }) {
   const [questions, setQuestions] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!cardId) return;
-    getIntakeQuestions(cardId)
+    getIntakeQuestions(cardId, scenarioId)
       .then((d) => setQuestions(d.questions))
       .catch(() => setError("Otázky sa nepodarilo načítať"));
-  }, [cardId]);
+  }, [cardId, scenarioId]);
 
   function toggle(question, optionId) {
     const current = value[question.id] || [];

@@ -91,13 +91,13 @@ export async function verifyBiometric(cardId, { frameSignature = null, forceMism
   return res.json();
 }
 
-export async function getScenario(cardId) {
-  const res = await fetch(`${API_BASE}/dispense/scenarios/${cardId}`);
+export async function getScenario(scenarioId) {
+  const res = await fetch(`${API_BASE}/dispense/scenarios/${scenarioId}`);
   if (!res.ok) return null;
   return res.json();
 }
 
-export async function verifyDispense({ cardId, prescriptionText, identityVerified = true, intake = {} }) {
+export async function verifyDispense({ cardId, prescriptionText, identityVerified = true, intake = {}, scenario = null }) {
   const res = await fetch(`${API_BASE}/dispense/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -106,6 +106,7 @@ export async function verifyDispense({ cardId, prescriptionText, identityVerifie
       prescription_text: prescriptionText,
       identity_verified: identityVerified,
       intake,
+      scenario,
     }),
   });
   if (!res.ok) {
@@ -134,9 +135,17 @@ export async function explainInteraction({ substanceA, substanceB, severity }) {
   return res.json();
 }
 
-export async function getIntakeQuestions(cardId) {
-  const params = cardId ? `?card_id=${encodeURIComponent(cardId)}` : "";
-  const res = await fetch(`${API_BASE}/dispense/intake${params}`);
+export async function getIntakeQuestions(cardId, scenarioId = null) {
+  const params = new URLSearchParams();
+  if (cardId) params.set("card_id", cardId);
+  if (scenarioId) params.set("scenario", scenarioId);
+  const res = await fetch(`${API_BASE}/dispense/intake?${params}`);
   if (!res.ok) throw new Error("Nepodarilo sa načítať otázky");
+  return res.json();
+}
+
+export async function getScenarios() {
+  const res = await fetch(`${API_BASE}/dispense/scenarios`);
+  if (!res.ok) throw new Error("Nepodarilo sa načítať scenáre");
   return res.json();
 }

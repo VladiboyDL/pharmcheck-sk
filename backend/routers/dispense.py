@@ -27,64 +27,85 @@ router = APIRouter(prefix="/api/dispense", tags=["dispense"])
 
 SEVERITY_RANK = {"Závažná": 0, "Stredná": 1, "Mierna": 2}
 
-DEMO_PRESCRIPTIONS: dict[str, dict] = {
-    "SK7154120987": {
-        "label": "Polyfarmácia seniorky — 7 liekov",
-        "prescriber": "MUDr. Eva Tóthová, ambulancia VLD Bratislava-Ružinov",
-        "text": (
-            "WARFARIN ORION 5 mg tbl   1-0-0\n"
-            "NUROFEN 400 mg tbl        1-1-1\n"
-            "HELICID 20 mg cps         1-0-0\n"
-            "Simvacard 20 mg tbl       0-0-1\n"
-            "HIPRES 5 mg tbl           1-0-0\n"
-            "Furon 40 mg tbl           1-0-0\n"
-            "Zolpidem 10 mg tbl        0-0-1"
-        ),
-    },
-    "SK9203114455": {
-        "label": "Depresia + bolesť — riziko sérotonínového syndrómu",
-        "prescriber": "MUDr. Martin Krajčí, psychiatrická ambulancia Trnava",
-        "text": (
-            "ZOLOFT 50 mg tbl          1-0-0\n"
-            "TRAMAL 100 mg cps         1-1-1\n"
-            "PARALEN 500 mg tbl        2-2-2\n"
-            "VOLTAREN 50 mg tbl        1-1-1"
-        ),
-    },
-    "SK9655087723": {
-        "label": "Gravidita — kontraindikované prípravky",
-        "prescriber": "MUDr. Lenka Sedláková, gynekologická ambulancia Nitra",
-        "text": (
-            "IBALGIN 400 mg tbl        1-1-1\n"
-            "RAMIPRIL 5 mg tbl         1-0-0\n"
-            "PARALEN 500 mg tbl        1-0-1"
-        ),
-    },
-    "SK5812093366": {
-        "label": "Metotrexát — chyba vo frekvencii podávania",
-        "prescriber": "MUDr. Peter Hraško, reumatologická ambulancia Košice",
-        "text": (
-            "Methotrexat Ebewe 10 mg tbl   1-0-0\n"
-            "Ibalgin 400 mg tbl            1-1-1\n"
-            "Prednison 20 mg tbl           1-0-0"
-        ),
-    },
-    "SK8407224411": {
-        "label": "Bežný recept — všetky kontroly prejdú",
+# One identity, several clinical situations. Every profile below is plausible for a
+# 36-year-old man, so the face on the camera always matches the record on screen.
+DEMO_SCENARIOS: dict[str, dict] = {
+    "clean": {
+        "id": "clean",
+        "label": "Bežný recept",
+        "subtitle": "Všetky kontroly prejdú",
         "prescriber": "MUDr. Silvia Rybárová, ambulancia VLD Žilina",
+        "profile": {"chronic": ["Hypotyreóza"]},
         "text": (
             "EUTHYROX 75 ug tbl        1-0-0\n"
             "AMOKSIKLAV 1 g tbl        1-0-1\n"
             "PARALEN 500 mg tbl        1-0-1"
         ),
     },
-    "SK1409116688": {
-        "label": "Detský pacient — vekové obmedzenia",
-        "prescriber": "MUDr. Jana Baloghová, pediatrická ambulancia Bratislava",
+    "pain_mood": {
+        "id": "pain_mood",
+        "label": "Bolesť chrbta a úzkosť",
+        "subtitle": "Samoliečba odhalí riziko",
+        "prescriber": "MUDr. Martin Krajčí, psychiatrická ambulancia Trnava",
+        "profile": {"chronic": ["Depresívna porucha", "Chronická bolesť chrbta"]},
         "text": (
-            "CIPRINOL 250 mg tbl       1-0-1\n"
-            "PARALEN 500 mg tbl        1-1-1\n"
-            "ACYLPYRIN 500 mg tbl      1-0-1"
+            "ZOLOFT 50 mg tbl          1-0-0\n"
+            "TRAMAL 100 mg cps         1-1-1\n"
+            "PARALEN 500 mg tbl        2-2-2\n"
+            "VOLTAREN 50 mg tbl        1-1-1"
+        ),
+        "suggested_intake": {"otc_pain": ["ibuprofen"], "supplements": ["st_johns_wort"]},
+    },
+    "anticoagulation": {
+        "id": "anticoagulation",
+        "label": "Po pľúcnej embólii",
+        "subtitle": "Antikoagulácia a riziko krvácania",
+        "prescriber": "MUDr. Eva Tóthová, interná ambulancia Bratislava-Ružinov",
+        "profile": {"chronic": ["Stav po pľúcnej embólii", "Hypertenzia", "Hypercholesterolémia"]},
+        "text": (
+            "WARFARIN ORION 5 mg tbl   1-0-0\n"
+            "HELICID 20 mg cps         1-0-0\n"
+            "Simvacard 20 mg tbl       0-0-1\n"
+            "HIPRES 5 mg tbl           1-0-0"
+        ),
+        "suggested_intake": {"otc_pain": ["ibuprofen"]},
+    },
+    "renal": {
+        "id": "renal",
+        "label": "Znížená funkcia obličiek",
+        "subtitle": "Dávkovanie podľa eGFR",
+        "prescriber": "MUDr. Peter Hraško, diabetologická ambulancia Košice",
+        "profile": {
+            "egfr": 26,
+            "chronic": ["Diabetes mellitus 2. typu", "Diabetická nefropatia, CKD G4"],
+        },
+        "text": (
+            "SIOFOR 850 mg tbl         1-0-1\n"
+            "RAMIPRIL 5 mg tbl         1-0-0\n"
+            "IBALGIN 400 mg tbl        1-1-1"
+        ),
+    },
+    "methotrexate": {
+        "id": "methotrexate",
+        "label": "Reumatoidná artritída",
+        "subtitle": "Chyba vo frekvencii podávania",
+        "prescriber": "MUDr. Jana Baloghová, reumatologická ambulancia Nitra",
+        "profile": {"chronic": ["Reumatoidná artritída"]},
+        "text": (
+            "Methotrexat Ebewe 10 mg tbl   1-0-0\n"
+            "Ibalgin 400 mg tbl            1-1-1\n"
+            "Prednison 20 mg tbl           1-0-0"
+        ),
+    },
+    "allergy": {
+        "id": "allergy",
+        "label": "Zaznamenaná alergia",
+        "subtitle": "Penicilín v karte pacienta",
+        "prescriber": "MUDr. Silvia Rybárová, ambulancia VLD Žilina",
+        "profile": {"allergies": ["amoxicillin"], "chronic": ["Alergia na penicilín"]},
+        "text": (
+            "AMOKSIKLAV 1 g tbl        1-0-1\n"
+            "PARALEN 500 mg tbl        1-0-1"
         ),
     },
 }
@@ -98,6 +119,8 @@ class VerifyRequest(BaseModel):
     deep_ai: bool = False
     # Interview answers: {question_id: [option_id, ...]}
     intake: Optional[dict] = None
+    # Demo scenario id — overlays a clinical profile onto the same identity.
+    scenario: Optional[str] = None
     # Allow the operator to override the card-derived profile during a demo.
     patient_override: Optional[dict] = None
 
@@ -145,23 +168,39 @@ def _interaction_row(db, sub_a: str, sub_b: str) -> tuple[dict | None, str, list
     return best, coverage, unknown
 
 
-@router.get("/scenarios/{card_id}")
-def scenario_for(card_id: str):
-    scenario = DEMO_PRESCRIPTIONS.get(card_id.upper())
+@router.get("/scenarios")
+def scenarios():
+    """The clinical situations available in the demo, all for the same patient."""
+    return {
+        "scenarios": [
+            {k: v for k, v in s.items() if k != "profile"} for s in DEMO_SCENARIOS.values()
+        ]
+    }
+
+
+@router.get("/scenarios/{scenario_id}")
+def scenario_for(scenario_id: str):
+    scenario = DEMO_SCENARIOS.get(scenario_id)
     if not scenario:
-        raise HTTPException(status_code=404, detail="Pre túto kartu nie je pripravený scenár")
+        raise HTTPException(status_code=404, detail="Scenár neexistuje")
     return scenario
 
 
 @router.get("/intake")
-def intake_questions(card_id: str | None = None):
+def intake_questions(card_id: str | None = None, scenario: str | None = None):
     """The interview shown before evaluation.
 
     A prescription only describes what a prescriber knew about. Most harm at the
     counter comes from what is missing from it — OTC analgesics, herbal supplements,
     a second prescriber's script — so we ask before we judge.
     """
-    return {"questions": intake.questions_for(get_patient(card_id) if card_id else None)}
+    patient = dict(get_patient(card_id) or {}) if card_id else {}
+    # The scenario decides whether the patient is on chronic therapy, which decides
+    # whether the adherence question is worth asking.
+    sc = DEMO_SCENARIOS.get(scenario or "")
+    if sc:
+        patient.update(sc["profile"])
+    return {"questions": intake.questions_for(patient or None)}
 
 
 def _item_status(item, own_findings, regimen_findings, interactions) -> tuple[str, list[str]]:
@@ -411,6 +450,9 @@ def verify(req: VerifyRequest):
         # ── Patient profile ────────────────────────────────────────────────────
         record = get_patient(req.card_id) if req.card_id else None
         profile = dict(record) if record else {}
+        scenario = DEMO_SCENARIOS.get(req.scenario or "")
+        if scenario:
+            profile.update(scenario["profile"])
         if req.patient_override:
             profile.update(req.patient_override)
 
