@@ -17,6 +17,7 @@ class IntakeOption:
     label: str
     # Active substances this answer contributes to the checked regimen.
     substances: list[str] = field(default_factory=list)
+    icon: str = ""
     # Free-standing risk note, used when the answer has no substance to check.
     note: str = ""
     severity: str = ""          # "critical" | "warning" | "info"
@@ -30,6 +31,10 @@ class IntakeQuestion:
     hint: str
     multi: bool
     options: list[IntakeOption]
+    # Questions sharing a group are shown on one screen. Five screens of one question
+    # each is a form; two screens of related questions is a conversation.
+    group: str = "other"
+    short: str = ""          # kiosk phrasing — plainer and shorter than the console's
 
 
 NONE = IntakeOption(id="none", label="Nič z uvedeného", exclusive=True)
@@ -38,33 +43,37 @@ QUESTIONS: list[IntakeQuestion] = [
     IntakeQuestion(
         id="otc_pain",
         prompt="Užívate niečo na bolesť, čo vám lekár nepredpísal?",
+        short="Beriete niečo na bolesť?",
         hint="Aj to, čo ste si kúpili v lekárni alebo máte doma v zásobe.",
+        group="self_medication",
         multi=True,
         options=[
-            IntakeOption("ibuprofen", "Ibalgin, Nurofen, Ibumax", ["ibuprofen"]),
-            IntakeOption("paracetamol", "Paralen, Panadol, Coldrex", ["paracetamol"]),
-            IntakeOption("aspirin", "Acylpyrín, Aspirín", ["acetylsalicylic acid"]),
-            IntakeOption("diclofenac", "Voltaren, Olfen — aj masť", ["diclofenac"]),
-            IntakeOption("naproxen", "Aleve, Nalgesin", ["naproxen"]),
+            IntakeOption("ibuprofen", "Ibalgin, Nurofen, Ibumax", ["ibuprofen"], icon="pill"),
+            IntakeOption("paracetamol", "Paralen, Panadol, Coldrex", ["paracetamol"], icon="pill"),
+            IntakeOption("aspirin", "Acylpyrín, Aspirín", ["acetylsalicylic acid"], icon="pill"),
+            IntakeOption("diclofenac", "Voltaren, Olfen — aj masť", ["diclofenac"], icon="tube"),
+            IntakeOption("naproxen", "Aleve, Nalgesin", ["naproxen"], icon="pill"),
             NONE,
         ],
     ),
     IntakeQuestion(
         id="supplements",
         prompt="Beriete výživové doplnky alebo bylinky?",
+        short="A doplnky alebo bylinky?",
         hint="Aj čaje a kvapky. Väčšina pacientov ich za lieky nepovažuje.",
+        group="self_medication",
         multi=True,
         options=[
-            IntakeOption("st_johns_wort", "Ľubovník bodkovaný", ["st john's wort"]),
-            IntakeOption("ginkgo", "Ginkgo biloba", ["ginkgo biloba"]),
-            IntakeOption("fish_oil", "Rybí olej, omega-3", ["omega-3 fatty acids"]),
+            IntakeOption("st_johns_wort", "Ľubovník bodkovaný", ["st john's wort"], icon="leaf"),
+            IntakeOption("ginkgo", "Ginkgo biloba", ["ginkgo biloba"], icon="leaf"),
+            IntakeOption("fish_oil", "Rybí olej, omega-3", ["omega-3 fatty acids"], icon="drop"),
             IntakeOption(
-                "vitamin_k", "Vitamín K, zelené smoothie", [],
+                "vitamin_k", "Vitamín K, zelené smoothie", [], icon="leaf",
                 note="Vitamín K priamo znižuje účinok warfarínu. Dôležitá je stabilita príjmu, nie jeho vynechanie.",
                 severity="warning",
             ),
             IntakeOption(
-                "calcium_iron", "Vápnik, horčík alebo železo", [],
+                "calcium_iron", "Vápnik, horčík alebo železo", [], icon="mineral",
                 note="Dvojmocné katióny viažu tetracyklíny, fluorochinolóny a levotyroxín. Dodržať odstup aspoň 2 hodiny.",
                 severity="info",
             ),
@@ -74,7 +83,9 @@ QUESTIONS: list[IntakeQuestion] = [
     IntakeQuestion(
         id="other_prescriber",
         prompt="Predpísal vám niečo iný lekár za posledné 3 mesiace?",
+        short="Boli ste u iného lekára?",
         hint="Špecialista nevidí, čo napísal obvodný lekár, a naopak.",
+        group="context",
         multi=False,
         options=[
             IntakeOption(
@@ -89,7 +100,9 @@ QUESTIONS: list[IntakeQuestion] = [
     IntakeQuestion(
         id="alcohol",
         prompt="Pijete alkohol pravidelne?",
+        short="Pijete alkohol pravidelne?",
         hint="Ovplyvňuje pečeňový metabolizmus aj riziko krvácania.",
+        group="context",
         multi=False,
         options=[
             IntakeOption(
@@ -105,7 +118,9 @@ QUESTIONS: list[IntakeQuestion] = [
     IntakeQuestion(
         id="adherence",
         prompt="Užívate všetky predpísané lieky tak, ako máte?",
+        short="Beriete lieky podľa predpisu?",
         hint="Bez výčitiek — vysadené lieky menia interakčný profil.",
+        group="context",
         multi=False,
         options=[
             IntakeOption(
@@ -131,10 +146,13 @@ def questions_for(patient: dict | None) -> list[dict]:
             {
                 "id": q.id,
                 "prompt": q.prompt,
+                "short": q.short or q.prompt,
                 "hint": q.hint,
                 "multi": q.multi,
+                "group": q.group,
                 "options": [
-                    {"id": o.id, "label": o.label, "exclusive": o.exclusive} for o in q.options
+                    {"id": o.id, "label": o.label, "exclusive": o.exclusive, "icon": o.icon}
+                    for o in q.options
                 ],
             }
         )

@@ -20,7 +20,7 @@ export default function KioskOutcome({ data, onRestart }) {
   const cards = useMemo(() => {
     const out = [];
     const counselStep = (data.next_steps ?? []).find((s) => s.kind === "counsel");
-    for (const line of (counselStep?.script ?? []).slice(0, 4)) {
+    for (const line of (counselStep?.script ?? []).slice(0, 2)) {
       out.push({ kind: "advice", topic: line.topic, ask: line.ask, body: line.patient || line.say });
     }
     for (const r of data.resolutions ?? []) {
@@ -33,10 +33,13 @@ export default function KioskOutcome({ data, onRestart }) {
         caveat: r.caveat,
       });
     }
-    return out;
+    // Two or three things get remembered. Beyond that it is a lecture, and the
+    // patient came here to leave with medicine.
+    return out.slice(0, 3);
   }, [data]);
 
-  const pages = 1 + cards.length + 1;
+  // No separate closing screen: the last card ends the journey.
+  const pages = 1 + cards.length;
   const next = () => setPage((p) => Math.min(p + 1, pages - 1));
 
   // ── Page 0: your medicines ────────────────────────────────────────────────
@@ -47,7 +50,7 @@ export default function KioskOutcome({ data, onRestart }) {
         footer={
           <div className="space-y-4">
             <BigButton onClick={nothingToSay ? onRestart : next} full>
-              {nothingToSay ? "Hotovo" : "Pokračovať"}
+              {nothingToSay ? "Hotovo, ďakujem" : "Pokračovať"}
             </BigButton>
             <Rail steps={pages} current={0} />
           </div>
@@ -63,12 +66,12 @@ export default function KioskOutcome({ data, onRestart }) {
           <Title
             sub={
               held.length
-                ? `Jeden liek si ešte overíme u vášho lekára, ostatné sú pripravené.`
-                : "Máme ich pripravené na výdaj."
+                ? "Jeden liek si ešte overíme u vášho lekára, ostatné si vyzdvihnite pri okienku."
+                : "Vyzdvihnite si ich pri okienku."
             }
           >
             {takeHome.length
-              ? `Vaše lieky sú pripravené`
+              ? "Vaše lieky sú pripravené"
               : "Musíme sa najprv spojiť s vaším lekárom"}
           </Title>
 
@@ -101,15 +104,16 @@ export default function KioskOutcome({ data, onRestart }) {
     );
   }
 
-  // ── Pages 1..n: one point at a time ───────────────────────────────────────
+  // ── Pages 1..n: one point at a time, the last one closes ──────────────────
   if (page <= cards.length) {
     const c = cards[page - 1];
+    const last = page === cards.length;
     return (
       <Screen
         footer={
           <div className="space-y-4">
-            <BigButton onClick={next} full>
-              Rozumiem
+            <BigButton onClick={last ? onRestart : next} full>
+              {last ? "Rozumiem, ďakujem" : "Rozumiem"}
             </BigButton>
             <Rail steps={pages} current={page} />
           </div>
@@ -146,45 +150,7 @@ export default function KioskOutcome({ data, onRestart }) {
     );
   }
 
-  // ── Final page ────────────────────────────────────────────────────────────
-  return (
-    <Screen
-      footer={
-        <div className="space-y-4">
-          <BigButton onClick={onRestart} full>
-            Hotovo
-          </BigButton>
-          <Rail steps={pages} current={pages - 1} />
-        </div>
-      }
-    >
-      <div className="text-center">
-        <Title
-          sub={
-            held.length
-              ? "Ozveme sa vám hneď, ako sa s lekárom spojíme."
-              : "Ak si nebudete istí čímkoľvek, pokojne sa vráťte a opýtajte sa."
-          }
-        >
-          {takeHome.length ? "Vyzdvihnite si lieky pri okienku" : "Ďakujeme"}
-        </Title>
-
-        <div className="mt-8 mx-auto max-w-md space-y-2 text-left">
-          {takeHome.length > 0 && (
-            <Line tone="good" text={`${takeHome.length} liekov je pripravených na výdaj`} />
-          )}
-          {declined.length > 0 && (
-            <Line tone="warn" text={`${declined.length}× prípravok, ktorý vám neodporúčame`} />
-          )}
-          {held.length > 0 && <Line tone="bad" text={`${held.length}× liek overujeme u lekára`} />}
-        </div>
-
-        <p className="mt-8 text-[11px] text-slate-600">
-          Záznam o kontrole: <span className="font-mono text-slate-500">{data.audit.audit_id}</span>
-        </p>
-      </div>
-    </Screen>
-  );
+  return null;
 }
 
 function Line({ text, tone }) {

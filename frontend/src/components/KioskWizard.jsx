@@ -1,26 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import KioskIdentity from "./kiosk/KioskIdentity";
 import KioskOutcome from "./kiosk/KioskOutcome";
-import { Screen, Title, BigButton, Rail } from "./kiosk/KioskShell";
+import KioskQuestions from "./kiosk/KioskQuestions";
+import { Screen, Title, BigButton } from "./kiosk/KioskShell";
 import { getIntakeQuestions, getScenarios, verifyDispense } from "../api/client";
+
+const STEPS = ["Vitajte", "Totožnosť", "Otázky", "Recept", "Hotovo"];
+const IDLE_RESET_MS = 120000;
 
 /**
  * The patient-facing side of the same engine the pharmacist console runs on.
  *
- * One decision per screen. The prescription loads in the background while the
- * questions are being asked, so the wait never has a spinner in front of it.
+ * Optimised for time-to-medicine: the check starts the moment the last question is
+ * answered and runs underneath the prescription screen, so the result is already
+ * waiting by the time the patient taps through. Nobody watches a spinner.
  */
 export default function KioskWizard({ onSessionResult }) {
-  const [phase, setPhase] = useState("welcome"); // welcome|identity|greet|questions|review|checking|result
+  const [phase, setPhase] = useState("welcome"); // welcome|identity|questions|review|result
   const [identity, setIdentity] = useState(null);
-  const [questions, setQuestions] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [groupIndex, setGroupIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [qIndex, setQIndex] = useState(0);
   const [scenarios, setScenarios] = useState([]);
   const [scenarioId, setScenarioId] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const answersRef = useRef({});
+  const pending = useRef(null);
+
+  const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
 
   useEffect(() => {
     getScenarios()
@@ -31,326 +38,215 @@ export default function KioskWizard({ onSessionResult }) {
       .catch(() => {});
   }, []);
 
-  // Questions are fetched the moment identity is known, so the patient is answering
-  // while the network work has already happened.
+  // Questions load while the patient is still tapping their card.
   useEffect(() => {
     const cardId = identity?.patient?.card_id;
     if (!cardId) return;
     getIntakeQuestions(cardId, scenarioId)
-      .then((d) => setQuestions(d.questions))
-      .catch(() => setQuestions([]));
+      .then((d) => {
+        const byGroup = [];
+        for (const q of d.questions) {
+          const existing = byGroup.find((g) => g.id === q.group);
+          if (existing) existing.questions.push(q);
+          else byGroup.push({ id: q.group, questions: [q] });
+        }
+        setGroups(byGroup);
+      })
+      .catch(() => setGroups([]));
   }, [identity?.patient?.card_id, scenarioId]);
 
-  const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
-
-  useEffect(() => {
-    if (phase !== "greet") return;
-    const t = setTimeout(() => setPhase("questions"), 2200);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  async function runCheck() {
-    setPhase("checking");
+  const restart = useCallback(() => {
+    setPhase("welcome");
+    setIdentity(null);
+    setGroups([]);
+    setGroupIndex(0);
+    setAnswers({});
+    setResult(null);
     setError(null);
+    pending.current = null;
+  }, []);
+
+  // A kiosk nobody is standing at must return to the start on its own.
+  useEffect(() => {
+    if (phase === "welcome") return;
+    let timer = setTimeout(restart, IDLE_RESET_MS);
+    const bump = () => {
+      clearTimeout(timer);
+      timer = setTimeout(restart, IDLE_RESET_MS);
+    };
+    window.addEventListener("pointerdown", bump);
+    window.addEventListener("keydown", bump);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("keydown", bump);
+    };
+  }, [phase, restart]);
+
+  /** Fire the check now; the prescription screen covers its latency. */
+  function startCheck(finalAnswers) {
+    setError(null);
+    const request = verifyDispense({
+      cardId: identity.patient.card_id,
+      prescriptionText: scenario?.text ?? "",
+      identityVerified: identity.biometric?.verified === true,
+      intake: finalAnswers,
+      scenario: scenarioId,
+    });
+    // The result is awaited a screen later, so swallow the rejection now to avoid an
+    // unhandled-rejection warning; showResult still sees it when it awaits.
+    request.catch(() => {});
+    pending.current = request;
+  }
+
+  async function showResult() {
     try {
-      const [data] = await Promise.all([
-        verifyDispense({
-          cardId: identity.patient.card_id,
-          prescriptionText: scenario?.text ?? "",
-          identityVerified: identity.biometric?.verified === true,
-          intake: answersRef.current,
-          scenario: scenarioId,
-        }),
-        // A verdict in 8 ms reads as "it did not look". Give the reassurance a beat.
-        new Promise((r) => setTimeout(r, 2100)),
-      ]);
+      const data = await (pending.current ?? Promise.reject(new Error("Kontrola nebola spustená")));
       setResult(data);
       onSessionResult?.(data);
       setPhase("result");
     } catch (e) {
       setError(e.message);
-      setPhase("review");
     }
   }
 
-  function answer(question, optionId) {
-    const current = answers[question.id] || [];
-    const option = question.options.find((o) => o.id === optionId);
-    let next;
-    if (!question.multi || option?.exclusive) {
-      next = [optionId];
-    } else {
-      const withoutExclusive = current.filter(
-        (id) => !question.options.find((o) => o.id === id)?.exclusive
-      );
-      next = withoutExclusive.includes(optionId)
-        ? withoutExclusive.filter((id) => id !== optionId)
-        : [...withoutExclusive, optionId];
+  function nextGroup() {
+    if (groupIndex + 1 < groups.length) {
+      setGroupIndex((i) => i + 1);
+      return;
     }
-    const merged = { ...answers, [question.id]: next };
-    setAnswers(merged);
-    answersRef.current = merged;
-    // Single-choice questions advance on their own — no second tap to confirm.
-    if (!question.multi) setTimeout(() => advanceQuestion(), 260);
+    startCheck(answers);
+    setPhase("review");
   }
 
-  function advanceQuestion() {
-    setQIndex((i) => {
-      if (i + 1 >= questions.length) {
-        setPhase("review");
-        return i;
-      }
-      return i + 1;
-    });
-  }
-
-  function restart() {
-    setPhase("welcome");
-    setIdentity(null);
-    setQuestions([]);
-    setAnswers({});
-    answersRef.current = {};
-    setQIndex(0);
-    setResult(null);
-    setError(null);
-  }
+  const stepIndex = useMemo(
+    () => ({ welcome: 0, identity: 1, questions: 2, review: 3, result: 4 }[phase] ?? 0),
+    [phase]
+  );
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="rounded-3xl border border-slate-800 bg-slate-950 px-6 sm:px-10 py-8 shadow-2xl">
-        {phase === "welcome" && (
-          <Screen
-            footer={
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-dashed border-slate-700 p-4">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
-                    Demo — vyberte klinickú situáciu
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {scenarios.map((sc) => (
-                      <button
-                        key={sc.id}
-                        onClick={() => setScenarioId(sc.id)}
-                        className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                          sc.id === scenarioId
-                            ? "border-cyan-600 bg-cyan-950/40"
-                            : "border-slate-800 bg-slate-900/50 hover:border-slate-600"
-                        }`}
-                      >
-                        <span className="block text-sm text-slate-100">{sc.label}</span>
-                        <span className="block text-[11px] text-slate-500">{sc.subtitle}</span>
-                      </button>
-                    ))}
-                  </div>
+      {/* Demo control, deliberately outside the patient flow. */}
+      <div className="mb-3 rounded-2xl border border-dashed border-slate-800 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-slate-600 mr-1">
+            Demo — situácia
+          </span>
+          {scenarios.map((sc) => (
+            <button
+              key={sc.id}
+              onClick={() => {
+                setScenarioId(sc.id);
+                restart();
+              }}
+              className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+                sc.id === scenarioId
+                  ? "border-cyan-700 bg-cyan-950/50 text-cyan-200"
+                  : "border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+              }`}
+            >
+              {sc.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+        {/* Where am I, how much is left */}
+        <div className="flex items-center gap-3 px-6 sm:px-10 pt-5">
+          {STEPS.map((label, i) => (
+            <div key={label} className="flex-1">
+              <span
+                className={`block h-1 rounded-full transition-colors duration-300 ${
+                  i < stepIndex ? "bg-cyan-600" : i === stepIndex ? "bg-cyan-400" : "bg-slate-800"
+                }`}
+              />
+              <span
+                className={`mt-1.5 block text-[10px] ${
+                  i === stepIndex ? "text-cyan-300" : "text-slate-700"
+                }`}
+              >
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 sm:px-10 pb-8 pt-2">
+          {phase === "welcome" && (
+            <Screen footer={<BigButton onClick={() => setPhase("identity")} full>Začať</BigButton>}>
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 grid place-items-center mx-auto mb-7">
+                  <svg className="w-8 h-8 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 003 9c0 5.6 3.8 10.3 9 11.6 5.2-1.3 9-6 9-11.6 0-1-.1-2-.4-3z" />
+                  </svg>
                 </div>
-                <BigButton onClick={() => setPhase("identity")} disabled={!scenarioId} full>
-                  Začať
-                </BigButton>
+                <Title sub="Priložíte kartu, odpoviete na dve otázky a odchádzate s liekmi. Minúta a pol.">
+                  Dobrý deň
+                </Title>
               </div>
-            }
-          >
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 grid place-items-center mx-auto mb-7">
-                <svg className="w-8 h-8 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 003 9c0 5.6 3.8 10.3 9 11.6 5.2-1.3 9-6 9-11.6 0-1-.1-2-.4-3z" />
-                </svg>
+            </Screen>
+          )}
+
+          {phase === "identity" && (
+            <KioskIdentity
+              onDone={(id) => {
+                setIdentity(id);
+                setPhase("questions");
+              }}
+            />
+          )}
+
+          {phase === "questions" && groups[groupIndex] && (
+            <KioskQuestions
+              group={groups[groupIndex]}
+              greeting={groupIndex === 0 ? identity.patient.name.split(" ")[0] : null}
+              answers={answers}
+              onChange={setAnswers}
+              onNext={nextGroup}
+              onBack={groupIndex > 0 ? () => setGroupIndex((i) => i - 1) : null}
+            />
+          )}
+
+          {phase === "review" && (
+            <Screen
+              footer={
+                <div className="space-y-3">
+                  <BigButton onClick={showResult} full>
+                    Pokračovať
+                  </BigButton>
+                  {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+                </div>
+              }
+            >
+              <div>
+                <Title sub="Toto vám predpísal lekár. Kontrolujeme to spolu s tým, čo ste mi povedali.">
+                  Váš recept
+                </Title>
+                <ul className="mt-7 space-y-2">
+                  {(scenario?.text ?? "")
+                    .split("\n")
+                    .filter(Boolean)
+                    .map((line, n) => (
+                      <li
+                        key={n}
+                        className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3.5 text-slate-200 text-base"
+                      >
+                        {line.trim()}
+                      </li>
+                    ))}
+                </ul>
               </div>
-              <Title sub="Skontrolujeme váš recept a bezpečnosť liekov, ktoré užívate. Trvá to necelé dve minúty.">
-                Dobrý deň
-              </Title>
-            </div>
-          </Screen>
-        )}
+            </Screen>
+          )}
 
-        {phase === "identity" && (
-          <KioskIdentity
-            onDone={(id) => {
-              setIdentity(id);
-              setPhase("greet");
-            }}
-          />
-        )}
-
-        {phase === "greet" && (
-          <Screen>
-            <div className="text-center">
-              <Title sub="Sťahujem váš recept z eZdravia. Medzitým sa vás opýtam na pár vecí.">
-                Vitajte, {identity.patient.name.split(" ")[0]}
-              </Title>
-              <div className="mt-9 flex justify-center gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce"
-                    style={{ animationDelay: `${i * 140}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </Screen>
-        )}
-
-        {phase === "questions" && questions.length > 0 && (
-          <QuestionScreen
-            question={questions[qIndex]}
-            index={qIndex}
-            total={questions.length}
-            chosen={answers[questions[qIndex].id] || []}
-            onPick={(id) => answer(questions[qIndex], id)}
-            onNext={advanceQuestion}
-          />
-        )}
-
-        {phase === "review" && (
-          <Screen
-            footer={
-              <div className="space-y-4">
-                <BigButton onClick={runCheck} full>
-                  Skontrolovať
-                </BigButton>
-                {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-              </div>
-            }
-          >
-            <div>
-              <Title sub="Toto vám predpísal lekár. Skontrolujeme to spolu s tým, čo ste mi povedali.">
-                Váš recept
-              </Title>
-              <ul className="mt-8 space-y-2">
-                {(scenario?.text ?? "").split("\n").filter(Boolean).map((line, n) => (
-                  <li
-                    key={n}
-                    className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-slate-200 font-mono text-sm"
-                  >
-                    {line.trim()}
-                  </li>
-                ))}
-              </ul>
-              {scenario?.prescriber && (
-                <p className="mt-4 text-center text-xs text-slate-500">{scenario.prescriber}</p>
-              )}
-            </div>
-          </Screen>
-        )}
-
-        {phase === "checking" && <CheckingScreen />}
-
-        {phase === "result" && result && <KioskOutcome data={result} onRestart={restart} />}
+          {phase === "result" && result && <KioskOutcome data={result} onRestart={restart} />}
+        </div>
       </div>
 
       <p className="mt-4 text-center text-[11px] text-slate-600">
         Rovnaký klinický engine ako pultová konzola · identita a eRecept sú v deme simulované
       </p>
     </div>
-  );
-}
-
-function QuestionScreen({ question, index, total, chosen, onPick, onNext }) {
-  const hasAnswer = chosen.length > 0;
-  return (
-    <Screen
-      footer={
-        <div className="space-y-4">
-          {question.multi && (
-            <BigButton onClick={onNext} full tone={hasAnswer ? "primary" : "ghost"}>
-              {hasAnswer ? "Pokračovať" : "Preskočiť"}
-            </BigButton>
-          )}
-          <Rail steps={total} current={index} />
-        </div>
-      }
-    >
-      <div>
-        <p className="text-center text-xs uppercase tracking-wider text-slate-500 mb-4">
-          Otázka {index + 1} z {total}
-        </p>
-        <Title sub={question.hint}>{question.prompt}</Title>
-
-        <div className="mt-8 grid gap-2.5">
-          {question.options.map((o) => {
-            const active = chosen.includes(o.id);
-            return (
-              <button
-                key={o.id}
-                onClick={() => onPick(o.id)}
-                aria-pressed={active}
-                className={`w-full rounded-2xl border-2 px-5 py-4 text-left text-lg transition-colors ${
-                  active
-                    ? o.exclusive
-                      ? "border-slate-500 bg-slate-800 text-slate-100"
-                      : "border-amber-500 bg-amber-950/40 text-amber-100"
-                    : "border-slate-800 bg-slate-900/50 text-slate-300 hover:border-slate-600"
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <span
-                    className={`w-5 h-5 rounded-md border-2 grid place-items-center flex-shrink-0 ${
-                      active ? "border-current" : "border-slate-700"
-                    }`}
-                  >
-                    {active && (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </span>
-                  {o.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {question.multi && (
-          <p className="mt-4 text-center text-xs text-slate-600">Môžete označiť aj viac možností</p>
-        )}
-      </div>
-    </Screen>
-  );
-}
-
-const CHECK_STEPS = [
-  "Kontrolujem liekové interakcie",
-  "Overujem dávkovanie podľa vašich obličiek",
-  "Hľadám duplicitnú liečbu",
-  "Pripravujem odporúčanie",
-];
-
-function CheckingScreen() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => Math.min(s + 1, CHECK_STEPS.length - 1)), 520);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <Screen>
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-8 rounded-full border-4 border-slate-800 border-t-cyan-400 animate-spin" />
-        <Title>Kontrolujem</Title>
-        <ul className="mt-8 space-y-2 max-w-sm mx-auto text-left">
-          {CHECK_STEPS.map((label, i) => (
-            <li
-              key={label}
-              className={`flex items-center gap-3 text-sm transition-opacity ${
-                i <= step ? "opacity-100" : "opacity-30"
-              }`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full grid place-items-center flex-shrink-0 ${
-                  i < step ? "bg-emerald-500" : i === step ? "bg-cyan-400 animate-pulse" : "bg-slate-800"
-                }`}
-              >
-                {i < step && (
-                  <svg className="w-2.5 h-2.5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </span>
-              <span className="text-slate-300">{label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Screen>
   );
 }
