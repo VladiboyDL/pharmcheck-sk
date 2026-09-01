@@ -8,11 +8,13 @@ import PatientProfiles from "./components/PatientProfiles";
 import StatsPanel from "./components/StatsPanel";
 import PharmacistChat from "./components/PharmacistChat";
 import DispensingWindow from "./components/DispensingWindow";
+import KioskWizard from "./components/KioskWizard";
 import ImpactDashboard from "./components/ImpactDashboard";
 import { checkInteractions, getStats } from "./api/client";
 
 const TABS = [
-  { id: "dispense", label: "Výdajové okno", icon: "counter" },
+  { id: "kiosk", label: "Kiosk (pacient)", icon: "kiosk" },
+  { id: "dispense", label: "Konzola (lekárnik)", icon: "counter" },
   { id: "pharmacist", label: "AI Lekárnik", icon: "chat" },
   { id: "checker", label: "Kontrola interakcií", icon: "shield" },
   { id: "atc", label: "ATC klasifikácia", icon: "grid" },
@@ -21,10 +23,10 @@ const TABS = [
 ];
 
 // Tabs rendered as an operator console rather than a light web page.
-const DARK_TABS = new Set(["dispense", "impact"]);
+const DARK_TABS = new Set(["kiosk", "dispense", "impact"]);
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dispense");
+  const [activeTab, setActiveTab] = useState("kiosk");
   const [sessionResults, setSessionResults] = useState([]);
   const [medications, setMedications] = useState([]);
   const [results, setResults] = useState(null);
@@ -172,6 +174,10 @@ export default function App() {
 
       {/* Main content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {activeTab === "kiosk" && (
+          <KioskWizard onSessionResult={(r) => setSessionResults((prev) => [...prev, r])} />
+        )}
+
         {activeTab === "dispense" && (
           <DispensingWindow
             onSessionResult={(r) => setSessionResults((prev) => [...prev, r])}
@@ -408,6 +414,14 @@ function DemoScenarios({ onLoad }) {
 }
 
 function TabIcon({ icon }) {
+  if (icon === "kiosk") {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <rect x="5" y="2" width="14" height="20" rx="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeWidth={2} d="M9 18h6" />
+      </svg>
+    );
+  }
   if (icon === "counter") {
     return (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

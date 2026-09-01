@@ -2,6 +2,18 @@ import { useState } from "react";
 import { explainInteraction } from "../api/client";
 
 const VERDICT_STYLES = {
+  COUNSEL: {
+    ring: "border-amber-700 bg-amber-950/40",
+    chip: "bg-amber-400 text-amber-950",
+    text: "text-amber-200",
+    icon: "M8 10h.01M12 10h.01M16 10h.01M21 12a9 9 0 11-3.2-6.9L21 4l-.9 3.2A9 9 0 0121 12z",
+  },
+  VERIFY: {
+    ring: "border-red-700 bg-red-950/40",
+    chip: "bg-red-500 text-red-950",
+    text: "text-red-200",
+    icon: "M3 5a2 2 0 012-2h3l2 5-2.5 1.5a11 11 0 005 5L14 12l5 2v3a2 2 0 01-2 2A14 14 0 013 5z",
+  },
   PARTIAL: {
     ring: "border-amber-700 bg-amber-950/40",
     chip: "bg-amber-400 text-amber-950",
@@ -91,7 +103,7 @@ export default function DispenseResult({ data, onReset }) {
           <Stat value={s.pairs_checked} label="liekových párov" />
           <Stat
             value={s.dispensable != null ? `${s.dispensable}/${s.items}` : s.items}
-            label="položiek na výdaj"
+            label="položiek ide von"
           />
         </div>
 
@@ -234,7 +246,10 @@ export default function DispenseResult({ data, onReset }) {
 const STEP_STYLE = {
   dispense: { box: "border-emerald-800 bg-emerald-950/30", text: "text-emerald-200", icon: "M5 13l4 4L19 7" },
   advise: { box: "border-emerald-800 bg-emerald-950/30", text: "text-emerald-200", icon: "M5 13l4 4L19 7" },
+  counsel: { box: "border-amber-800 bg-amber-950/30", text: "text-amber-200", icon: "M8 10h.01M12 10h.01M16 10h.01M21 12a9 9 0 11-3.2-6.9L21 4l-.9 3.2A9 9 0 0121 12z" },
+  decline: { box: "border-orange-800 bg-orange-950/30", text: "text-orange-200", icon: "M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" },
   swap: { box: "border-amber-800 bg-amber-950/30", text: "text-amber-200", icon: "M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" },
+  verify: { box: "border-red-800 bg-red-950/30", text: "text-red-200", icon: "M3 5a2 2 0 012-2h3l2 5-2.5 1.5a11 11 0 005 5L14 12l5 2v3a2 2 0 01-2 2A14 14 0 013 5z" },
   contact: { box: "border-red-800 bg-red-950/30", text: "text-red-200", icon: "M3 5a2 2 0 012-2h3l2 5-2.5 1.5a11 11 0 005 5L14 12l5 2v3a2 2 0 01-2 2A14 14 0 013 5z" },
 };
 
@@ -260,6 +275,7 @@ function NextSteps({ steps }) {
                 <div className="min-w-0 flex-1">
                   <p className={`text-sm font-semibold ${st.text}`}>{step.title}</p>
                   <p className="text-xs text-slate-400 mt-1 leading-relaxed">{step.detail}</p>
+                  {step.script?.length > 0 && <CounsellingScript lines={step.script} />}
                   {step.message && <PrescriberMessage text={step.message} />}
                 </div>
               </div>
@@ -268,6 +284,43 @@ function NextSteps({ steps }) {
         })}
       </div>
     </section>
+  );
+}
+
+/** What to say at the window: the question first, then the professional action. */
+function CounsellingScript({ lines }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-[11px] text-slate-300 underline underline-offset-2 hover:text-slate-100"
+      >
+        {open ? "Skryť scenár rozhovoru" : `Zobraziť scenár rozhovoru (${lines.length})`}
+      </button>
+      {open && (
+        <ol className="mt-2.5 space-y-2.5">
+          {lines.map((l, n) => (
+            <li key={n} className="rounded-lg bg-slate-950/70 border border-slate-800 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">{l.topic}</p>
+              <p className="mt-1.5 text-sm text-slate-100">„{l.ask}“</p>
+              {l.patient && (
+                <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
+                  <span className="text-slate-500">Pacientovi: </span>
+                  {l.patient}
+                </p>
+              )}
+              {l.say && (
+                <p className="mt-1.5 text-xs text-cyan-300/80 leading-relaxed">
+                  <span className="text-slate-500">Odborne: </span>
+                  {l.say}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 
@@ -310,13 +363,14 @@ function PrescriberMessage({ text }) {
 }
 
 const ITEM_STATUS = {
-  ok: { label: "Vydať", cls: "bg-emerald-500/15 text-emerald-300" },
-  review: { label: "Vydať s poučením", cls: "bg-amber-500/15 text-amber-300" },
-  hold: { label: "Zadržať", cls: "bg-red-500/15 text-red-300" },
+  dispense: { label: "Vydať", cls: "bg-emerald-500/15 text-emerald-300" },
+  counsel: { label: "Vydať + poučiť", cls: "bg-amber-500/15 text-amber-300" },
+  decline: { label: "Neodporúčať", cls: "bg-orange-500/15 text-orange-300" },
+  verify: { label: "Overiť u lekára", cls: "bg-red-500/15 text-red-300" },
 };
 
 function ItemStatus({ status, reasons }) {
-  const st = ITEM_STATUS[status] ?? ITEM_STATUS.ok;
+  const st = ITEM_STATUS[status] ?? ITEM_STATUS.dispense;
   return (
     <div className="inline-block text-right">
       <span className={`rounded px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${st.cls}`}>

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from .. import clinical
 from ..ai_checker import ANTHROPIC_API_KEY, check_interaction_ai
-from .. import intake, substances
+from .. import intake, resolver, substances
 from ..database import get_db
 from ..patients import get_patient
 from ..prescription import resolve
@@ -165,17 +165,23 @@ def intake_questions(card_id: str | None = None):
 
 
 def _item_status(item, own_findings, regimen_findings, interactions) -> tuple[str, list[str]]:
-    """Decide, per item, whether it can go over the counter.
+    """What the counter actually does with this item.
 
-    The split matters clinically. A pharmacist can stop self-medication on the spot,
-    but cannot unilaterally withhold chronic prescribed therapy — abruptly dropping an
-    SSRI does its own harm. So a regimen-level problem holds the self-medication that
-    caused it and refers the prescribed drugs, rather than blocking the whole basket.
+        dispense  hand it over, nothing to say
+        counsel   hand it over and say something — the common case, including
+                  interactions, which a pharmacy does not refuse a script over
+        verify    telephone the prescriber first: suspected prescribing error or an
+                  absolute contraindication, not merely a managed risk
+        decline   only for self-medication, the one thing a pharmacy may refuse to sell
+
+    A pharmacy has no standing to overrule a valid prescription. Getting this wrong
+    is not a UX detail — it is the difference between a tool a pharmacist trusts and
+    one they switch off.
     """
     name = item["trade_name"]
     from_interview = item.get("source") == "interview"
     reasons: list[str] = []
-    status = "ok"
+    status = "dispense"
 
     def raise_to(level: str, reason: str) -> None:
         nonlocal status
@@ -183,47 +189,48 @@ def _item_status(item, own_findings, regimen_findings, interactions) -> tuple[st
         if _rank(level) > _rank(status):
             status = level
 
-    # Item-level criticals are absolute: a contraindicated or overdosed product does
-    # not leave the counter regardless of where it came from.
     for f in own_findings:
-        if f.severity == "critical":
-            raise_to("hold", f.title)
-        elif f.severity == "warning":
-            raise_to("review", f.title)
+        if f.code in clinical.VERIFY_BEFORE_DISPENSING and f.severity == "critical":
+            raise_to("decline" if from_interview else "verify", f.title)
+        elif f.severity in ("critical", "warning"):
+            raise_to("decline" if from_interview and f.severity == "critical" else "counsel", f.title)
 
     for f in regimen_findings:
         if name not in (f.drugs or []):
             continue
-        if f.severity == "critical":
-            raise_to("hold" if from_interview else "review", f.title)
+        if f.code in clinical.VERIFY_BEFORE_DISPENSING and f.severity == "critical":
+            raise_to("decline" if from_interview else "verify", f.title)
+        elif f.severity == "critical":
+            # Self-medication is the piece the counter can act on; the prescription goes out.
+            raise_to("decline" if from_interview else "counsel", f.title)
         elif f.severity == "warning":
-            raise_to("review", f.title)
+            raise_to("counsel", f.title)
 
     for ix in interactions:
         if name not in (ix["drug_a"], ix["drug_b"]):
             continue
         other = ix["drug_b"] if ix["drug_a"] == name else ix["drug_a"]
         if ix["severity"] == "Závažná":
-            raise_to("hold" if from_interview else "review", f"Závažná interakcia s {other}")
+            raise_to("decline" if from_interview else "counsel", f"Závažná interakcia s {other}")
         elif ix["severity"] == "Stredná":
-            raise_to("review", f"Stredná interakcia s {other}")
+            raise_to("counsel", f"Stredná interakcia s {other}")
 
     return status, reasons
 
 
 def _rank(status: str) -> int:
-    return {"ok": 0, "review": 1, "hold": 2}.get(status, 0)
+    return {"dispense": 0, "counsel": 1, "decline": 2, "verify": 3}.get(status, 0)
 
 
 def _next_steps(items, item_findings, regimen_findings, interactions, patient_name) -> list[dict]:
-    """What actually happens now — the part a verdict alone never answers."""
+    """What the counter does, in the order it does it."""
     steps: list[dict] = []
 
     rx = [i for i in items if i.get("source") != "interview"]
-    held = [i for i in items if i["status"] == "hold"]
-    review = [i for i in rx if i["status"] == "review"]
-    clear = [i for i in rx if i["status"] == "ok"]
-    goes_out = clear + review
+    verify = [i for i in rx if i["status"] == "verify"]
+    counsel = [i for i in rx if i["status"] == "counsel"]
+    declined = [i for i in items if i["status"] == "decline"]
+    goes_out = [i for i in rx if i["status"] != "verify"]
 
     if goes_out:
         steps.append(
@@ -231,62 +238,133 @@ def _next_steps(items, item_findings, regimen_findings, interactions, patient_na
                 "kind": "dispense",
                 "title": f"Vydať {len(goes_out)} z {len(rx)} položiek receptu",
                 "detail": ", ".join(i["trade_name"] for i in goes_out)
-                + (
-                    ". Žiadna z nich nie je sama o sebe kontraindikovaná."
-                    if review
-                    else ". Prešli všetkými kontrolami bez nálezu."
-                ),
+                + ". Recept je platný a vydáva sa — nálezy nižšie sú na poučenie, nie dôvod na odmietnutie.",
                 "drugs": [i["trade_name"] for i in goes_out],
             }
         )
 
-    # Self-medication we can resolve on the spot, without the prescriber.
-    for item in held:
-        if item.get("source") != "interview":
-            continue
-        alternative = next(
-            (
-                ix.get("alternatives")
-                for ix in interactions
-                if item["trade_name"] in (ix["drug_a"], ix["drug_b"]) and ix.get("alternatives")
-            ),
-            "",
-        )
+    if counsel:
         steps.append(
             {
-                "kind": "swap",
-                "title": f"Zastaviť voľnopredajný {item['trade_name']}",
-                "detail": (
-                    f"Pacient ho užíva bez vedomia lekára a v tejto kombinácii je rizikový. "
-                    + (alternative or "Ponúknuť bezpečnejšiu alternatívu a poučiť, aby prípravok ďalej nekupoval.")
-                ),
+                "kind": "counsel",
+                "title": f"Poučiť pacienta pri výdaji ({len(counsel)})",
+                "detail": "Systém pripravil, čo presne povedať. Zaberie to pol minúty pri okienku.",
+                "drugs": [i["trade_name"] for i in counsel],
+                "script": _counselling_script(counsel, item_findings, regimen_findings, interactions),
+            }
+        )
+
+    for item in declined:
+        steps.append(
+            {
+                "kind": "decline",
+                "title": f"Neodporúčať {item['trade_name']}",
+                "detail": "Voľnopredajný prípravok, ktorý si pacient kupuje sám. Tu má lekáreň "
+                          "priestor odhovoriť a ponúknuť bezpečnejšiu možnosť.",
                 "drugs": [item["trade_name"]],
             }
         )
 
-    prescribed_problem = [i for i in held + review if i.get("source") != "interview"]
-    if prescribed_problem:
+    if verify:
         steps.append(
             {
-                "kind": "contact",
-                "title": "Kontaktovať predpisujúceho lekára",
-                "detail": "Nasledujúce položky sa nedajú vyriešiť pri pulte — vyžadujú zmenu predpisu.",
-                "drugs": [i["trade_name"] for i in prescribed_problem],
-                "message": _prescriber_message(prescribed_problem, item_findings, regimen_findings, interactions, patient_name),
+                "kind": "verify",
+                "title": f"Pred výdajom overiť u lekára ({len(verify)})",
+                "detail": "Nejde o interakciu, ale o podozrenie na chybu v predpise alebo absolútnu "
+                          "kontraindikáciu. Tieto položky sa vydajú až po telefonáte.",
+                "drugs": [i["trade_name"] for i in verify],
+                "message": _prescriber_message(verify, item_findings, regimen_findings, interactions, patient_name),
             }
         )
 
-    if not held and not review:
+    if not counsel and not verify and not declined:
         steps.append(
             {
                 "kind": "advise",
-                "title": "Poučiť pacienta a vydať",
-                "detail": "Bez zásahu. Pripomenúť dodržanie dávkovania a kedy sa vrátiť.",
+                "title": "Vydať bez ďalšieho",
+                "detail": "Žiadny nález. Pripomenúť dodržanie dávkovania a kedy sa vrátiť.",
                 "drugs": [],
             }
         )
 
     return steps
+
+
+def _counselling_script(items, item_findings, regimen_findings, interactions) -> list[dict]:
+    """The sentences a pharmacist actually says, written out.
+
+    The pharmacist we asked dispenses everything and counsels — so the useful output
+    is not a verdict, it is the question to ask and the sentence to close with.
+    """
+    script: list[dict] = []
+    seen: set[str] = set()
+
+    for ix in interactions:
+        if ix["severity"] not in ("Závažná", "Stredná"):
+            continue
+        key = f"{ix['drug_a']}+{ix['drug_b']}"
+        if key in seen:
+            continue
+        seen.add(key)
+        script.append(
+            {
+                "topic": f"{ix['drug_a']} + {ix['drug_b']}",
+                "ask": f"Vie váš lekár, že užívate {ix['drug_a']} aj {ix['drug_b']} súčasne?",
+                "patient": "Tieto dva lieky sa navzájom ovplyvňujú. Preberte to prosím "
+                           "pri najbližšej návšteve u lekára.",
+                "say": ix.get("management") or "",
+                "severity": ix["severity"],
+            }
+        )
+
+    for item in items:
+        for f in item_findings.get(item["key"], []):
+            if f.severity == "info" or f.title in seen:
+                continue
+            seen.add(f.title)
+            script.append(
+                {
+                    "topic": item["trade_name"],
+                    "ask": _ask_for(f, item["trade_name"]),
+                    "patient": f.detail,
+                    "say": f.action or "",
+                    "severity": "Upozornenie",
+                }
+            )
+
+    for f in regimen_findings:
+        if f.severity == "info" or f.title in seen:
+            continue
+        seen.add(f.title)
+        script.append(
+            {
+                "topic": ", ".join(f.drugs) if f.drugs else "Celá medikácia",
+                "ask": _ask_for(f, ", ".join(f.drugs)),
+                "patient": f.detail,
+                "say": f.action or "",
+                "severity": "Upozornenie",
+            }
+        )
+
+    return script
+
+
+def _ask_for(finding, subject: str) -> str:
+    """The opening question, phrased for the specific kind of finding."""
+    by_code = {
+        "GERIATRIC": f"Ako {subject} znášate? Nemávate závraty alebo pocit neistoty pri chôdzi?",
+        "FALL_RISK": "Nestalo sa vám v poslednom čase, že by ste zakopli alebo spadli?",
+        "BLEEDING_BURDEN": "Nevšimli ste si, že sa vám ľahšie robia modriny alebo dlhšie krváca ranka?",
+        "SEROTONIN_BURDEN": "Nemávate nepokoj, tras alebo nadmerné potenie?",
+        "DUPLICATE": f"Viete o tom, že {subject} obsahujú podobnú účinnú látku?",
+        "RENAL_REDUCE": "Kedy ste mali naposledy kontrolu obličiek?",
+        "RENAL_CAUTION": "Kedy ste mali naposledy kontrolu obličiek?",
+        "NEAR_MAX_DOSE": f"Beriete {subject} presne podľa predpisu, alebo si niekedy pridáte?",
+        "POLYPHARMACY": "Máte prehľad o všetkých liekoch, ktoré užívate?",
+        "QT": "Nemávate búšenie srdca alebo pocit na odpadnutie?",
+        "UNVERIFIED": "Užívate okrem toho ešte niečo, o čom sme sa nebavili?",
+    }
+    return by_code.get(finding.code, f"Vie váš lekár o tom, že užívate {subject}?")
 
 
 def _prescriber_message(problem_items, item_findings, regimen_findings, interactions, patient_name) -> str:
@@ -456,8 +534,7 @@ def verify(req: VerifyRequest):
             it["status"], it["status_reasons"] = status, reasons
 
         prescription_items = [i for i in items if i["source"] == "prescription"]
-        held = [i for i in prescription_items if i["status"] == "hold"]
-        dispensable = len(prescription_items) - len(held)
+        dispensable = sum(1 for i in prescription_items if i["status"] != "verify")
 
         # ── 7. Overall decision ────────────────────────────────────────────────
         all_findings = [f for fs in item_findings.values() for f in fs] + regimen_findings
@@ -467,52 +544,45 @@ def verify(req: VerifyRequest):
         major_ix = sum(1 for i in interactions if i["severity"] == "Závažná")
         moderate_ix = sum(1 for i in interactions if i["severity"] == "Stredná")
 
+        verify_items = [i for i in prescription_items if i["status"] == "verify"]
+        counsel_items = [i for i in prescription_items if i["status"] == "counsel"]
+        declined_items = [i for i in items if i["status"] == "decline"]
+
         if not req.identity_verified:
             verdict, label = "BLOCK", "NEVYDAŤ"
             reason = "Totožnosť pacienta nebola overená."
-            # Nothing leaves the counter, so no item counts as dispensable.
             dispensable = 0
             for it in items:
-                it["status"] = "hold"
+                it["status"] = "verify"
                 it["status_reasons"] = ["Neoverená totožnosť pacienta"]
             next_steps_override = [
                 {
-                    "kind": "contact",
+                    "kind": "verify",
                     "title": "Overiť totožnosť iným spôsobom",
                     "detail": "Vyžiadať doklad totožnosti a potvrdenie obsluhy. Bez overenia sa nevydáva "
                               "žiadna položka, vrátane voľnopredajných.",
                     "drugs": [],
                 }
             ]
-        elif critical:
-            if dispensable == len(prescription_items):
-                # Everything critical came from self-medication we can stop right here.
-                verdict, label = "CONSULT", "VYDAŤ SO ZÁSAHOM"
-                reason = (
-                    f"{critical}× kritické zistenie, všetky riešiteľné pri pulte. "
-                    "Recept sa vydáva celý, zastaviť treba samoliečbu."
-                )
-            elif dispensable:
-                verdict, label = "PARTIAL", "VYDAŤ ČIASTOČNE"
-                reason = (
-                    f"{critical}× kritické zistenie. Vydať sa dá {dispensable} z "
-                    f"{len(prescription_items)} položiek, {len(prescription_items) - dispensable} vyžaduje lekára."
-                )
-            else:
-                verdict, label = "BLOCK", "NEVYDAŤ"
-                reason = f"{critical}× kritické zistenie. Žiadnu položku nie je možné vydať bez zásahu lekára."
-        elif major_ix or warning:
-            verdict, label = "CONSULT", "KONZULTOVAŤ"
+        elif verify_items:
+            verdict, label = "VERIFY", "OVERIŤ U LEKÁRA"
+            reason = (
+                f"{len(verify_items)}× položka s podozrením na chybu v predpise alebo absolútnou "
+                f"kontraindikáciou. Zvyšok receptu ({dispensable} z {len(prescription_items)}) sa vydáva."
+            )
+        elif counsel_items or declined_items:
+            verdict, label = "COUNSEL", "VYDAŤ S POUČENÍM"
             bits = []
-            if major_ix:
-                bits.append(f"{major_ix}× závažná interakcia")
-            if warning:
-                bits.append(f"{warning}× upozornenie")
-            reason = " a ".join(bits) + " — pred výdajom konzultovať."
+            if counsel_items:
+                bits.append(f"{len(counsel_items)}× položka na poučenie")
+            if declined_items:
+                bits.append(f"{len(declined_items)}× voľnopredajný prípravok na odhovorenie")
+            reason = "Celý recept sa vydáva. " + " a ".join(bits) + "."
         else:
             verdict, label = "DISPENSE", "VYDAŤ"
-            reason = "Všetky kontroly prešli bez kritického nálezu."
+            reason = "Všetky kontroly prešli bez nálezu."
 
+        resolutions = resolver.resolve_all(db, items, patient) if req.identity_verified else []
         next_steps = (
             next_steps_override
             if not req.identity_verified
@@ -558,6 +628,7 @@ def verify(req: VerifyRequest):
             "unverified_pairs": unverified,
             "findings": [asdict(f) for f in regimen_findings],
             "next_steps": next_steps,
+            "resolutions": resolutions,
             "summary": {
                 "items": len(prescription_items),
                 "interview_items": len(extra),

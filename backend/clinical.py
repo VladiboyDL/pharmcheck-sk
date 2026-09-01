@@ -9,6 +9,25 @@ from typing import Literal, Optional
 
 Severity = Literal["critical", "warning", "info"]
 
+# A pharmacy dispenses valid prescriptions. It does not overrule the prescriber, and
+# it has no right to refuse a script because a drug interacts with another — that is
+# a counselling situation, not a refusal.
+#
+# These are the narrow codes where a pharmacist genuinely stops and telephones before
+# handing anything over, because they point at a suspected prescribing error or an
+# absolute contraindication rather than a manageable risk.
+VERIFY_BEFORE_DISPENSING = frozenset({
+    "FREQUENCY",          # methotrexate written daily — a lethal transcription error
+    "ALLERGY",            # documented allergy to the dispensed substance
+    "MAX_DOSE",           # above the licensed ceiling
+    "MAX_WEEKLY_DOSE",
+    "AGE",                # below the licensed age
+    "PREGNANCY",          # absolute contraindication in pregnancy
+    "RENAL_CONTRAINDICATED",
+    "SEROTONIN_MAOI",     # MAOI with a serotonergic agent
+    "DOSE_REDUCTION",     # patient meets the criteria, full dose was written
+})
+
 # ── Patient model ──────────────────────────────────────────────────────────────
 
 
@@ -423,7 +442,11 @@ THERAPEUTIC_CLASSES: dict[str, dict] = {
     "NSAID": {
         "label": "nesteroidné antiflogistiká",
         "atc_prefixes": ["M01A"],
-        "substances": ["ibuprofen", "diclofenac", "naproxen", "ketoprofen", "meloxicam", "nimesulide", "aceclofenac"],
+        "substances": [
+            "ibuprofen", "diclofenac", "naproxen", "ketoprofen", "dexketoprofen", "meloxicam",
+            "nimesulide", "aceclofenac", "etoricoxib", "celecoxib", "piroxicam", "indomethacin",
+            "ketorolac", "lornoxicam", "tenoxicam", "flurbiprofen", "etodolac",
+        ],
         "risk": "Súbežné podanie dvoch NSAID nezvyšuje analgetický účinok, ale násobí riziko GIT krvácania a poškodenia obličiek.",
         "severity": "critical",
     },
@@ -444,14 +467,22 @@ THERAPEUTIC_CLASSES: dict[str, dict] = {
     "BZD": {
         "label": "benzodiazepíny a Z-hypnotiká",
         "atc_prefixes": ["N05BA", "N05CD", "N05CF"],
-        "substances": ["alprazolam", "diazepam", "bromazepam", "oxazepam", "clonazepam", "zolpidem", "zopiclone", "midazolam"],
+        "substances": [
+            "alprazolam", "diazepam", "bromazepam", "oxazepam", "clonazepam", "zolpidem",
+            "zopiclone", "eszopiclone", "zaleplon", "midazolam", "lorazepam", "nitrazepam",
+            "temazepam", "chlordiazepoxide",
+        ],
         "risk": "Kumulatívna sedácia — riziko útlmu dýchania, pádov a fraktúr.",
         "severity": "critical",
     },
     "ACEI_ARB": {
         "label": "ACE inhibítory a sartany",
         "atc_prefixes": ["C09A", "C09C"],
-        "substances": ["ramipril", "perindopril", "enalapril", "lisinopril", "losartan", "valsartan", "telmisartan", "candesartan"],
+        "substances": [
+            "ramipril", "perindopril", "enalapril", "lisinopril", "quinapril", "cilazapril",
+            "trandolapril", "fosinopril", "captopril", "zofenopril",
+            "losartan", "valsartan", "telmisartan", "candesartan", "irbesartan", "olmesartan",
+        ],
         "risk": "Duálna blokáda RAAS sa neodporúča — riziko hyperkaliémie, hypotenzie a akútneho renálneho zlyhania.",
         "severity": "critical",
     },
@@ -598,7 +629,7 @@ def validate_item(item: dict, patient: Patient) -> list[Finding]:
         if applied and daily > applied:
             findings.append(
                 Finding(
-                    code="MAX_DOSE",
+                    code="MAX_DOSE" if applied == ceiling else "MAX_DOSE_ELDERLY",
                     severity="critical",
                     title=f"{name} — prekročená {label}",
                     detail=(
@@ -606,7 +637,11 @@ def validate_item(item: dict, patient: Patient) -> list[Finding]:
                         f"{_fmt(applied)} mg ({daily / applied:.1f}× limit)."
                     ),
                     drugs=[name],
-                    action="Nevydať v predpísanej dávke — overiť u lekára.",
+                    action=(
+                        "Overiť u lekára — dávka presahuje licencované maximum."
+                        if applied == ceiling
+                        else "Vydať a poučiť: u seniorov sa odporúča nižšia dávka. Navrhnúť lekárovi revíziu."
+                    ),
                 )
             )
         elif applied and daily > applied * 0.8:
