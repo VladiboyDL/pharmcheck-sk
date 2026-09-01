@@ -146,7 +146,7 @@ def worker(q: queue.Queue, results: queue.Queue, api_key: str, stop: threading.E
             for attempt in range(3):
                 resp = client.messages.create(
                     model=MODEL,
-                    max_tokens=500,
+                    max_tokens=900,
                     system=SYSTEM,
                     messages=[
                         {
