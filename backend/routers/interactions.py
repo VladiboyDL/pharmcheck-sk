@@ -2,8 +2,9 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Optional
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from ..database import get_db
-from ..ai_checker import check_interaction_ai, ANTHROPIC_API_KEY
+from ..ai_checker import check_interaction_ai, explain_interaction_ai, ANTHROPIC_API_KEY
 from ..models import (
     InteractionCheckRequest,
     InteractionCheckResponse,
@@ -159,5 +160,49 @@ def check_interactions(req: InteractionCheckRequest):
             ),
             ai_enabled=ai_enabled,
         )
+    finally:
+        db.close()
+
+
+# ── Lazy explanation ──────────────────────────────────────────────────────────
+
+
+class ExplainRequest(BaseModel):
+    substance_a: str
+    substance_b: str
+    severity: str
+
+
+@router.post("/explain")
+def explain(req: ExplainRequest):
+    """Clinical text for one pair, fetched when the pharmacist opens it.
+
+    Kept out of the dispense pass on purpose: generating text costs seconds, and the
+    dispense decision must stay fast and reproducible. Serves the stored text when it
+    exists, generates and persists it otherwise.
+    """
+    db = get_db()
+    try:
+        sa = req.substance_a.split(",")[0].strip().lower()
+        sb = req.substance_b.split(",")[0].strip().lower()
+
+        row = db.execute(
+            """SELECT mechanism, management, alternatives FROM interactions
+               WHERE (LOWER(drug_a)=? AND LOWER(drug_b)=?) OR (LOWER(drug_a)=? AND LOWER(drug_b)=?)
+               LIMIT 1""",
+            (sa, sb, sb, sa),
+        ).fetchone()
+
+        if row and row["mechanism"]:
+            return {**dict(row), "source": "db"}
+
+        if not ANTHROPIC_API_KEY:
+            raise HTTPException(status_code=503, detail="Vysvetlenie nie je k dispozícii")
+
+        result = explain_interaction_ai(sa, sb, req.severity, db)
+        if not result:
+            raise HTTPException(status_code=503, detail="Vysvetlenie sa nepodarilo vygenerovať")
+
+        return {**result, "source": "ai"}
     finally:
         db.close()

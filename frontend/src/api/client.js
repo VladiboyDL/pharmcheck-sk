@@ -119,3 +119,16 @@ export async function getDispenseLog(limit = 50) {
   if (!res.ok) throw new Error("Nepodarilo sa načítať auditný záznam");
   return res.json();
 }
+
+export async function explainInteraction({ substanceA, substanceB, severity }) {
+  const res = await fetch(`${API_BASE}/interactions/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ substance_a: substanceA, substance_b: substanceB, severity }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Vysvetlenie sa nepodarilo načítať");
+  }
+  return res.json();
+}

@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import clinical
-from ..ai_checker import ANTHROPIC_API_KEY, check_interaction_ai, explain_interaction_ai
+from ..ai_checker import ANTHROPIC_API_KEY, check_interaction_ai
 from ..database import get_db
 from ..patients import get_patient
 from ..prescription import resolve
@@ -93,6 +93,8 @@ class VerifyRequest(BaseModel):
     card_id: Optional[str] = None
     prescription_text: str
     identity_verified: bool = True
+    # Ask Claude about pairs DDInter does not know. Off by default — adds seconds.
+    deep_ai: bool = False
     # Allow the operator to override the card-derived profile during a demo.
     patient_override: Optional[dict] = None
 
@@ -172,27 +174,18 @@ def verify(req: VerifyRequest):
         interactions = []
         pairs_checked = 0
         ai_calls = 0
-        explain_calls = 0
         for a, b in combinations(items, 2):
             pairs_checked += 1
             hit = _interaction_row(db, a["active_substance"], b["active_substance"])
-            if not hit and ANTHROPIC_API_KEY and ai_calls < 6:
+
+            # Deep AI discovery is opt-in: it costs seconds per pair, and the dispense
+            # decision must stay fast and reproducible. Missing clinical text is fetched
+            # lazily by the client via /api/interactions/explain instead.
+            if not hit and req.deep_ai and ANTHROPIC_API_KEY and ai_calls < 6:
                 ai = check_interaction_ai(a["active_substance"], b["active_substance"], db)
                 ai_calls += 1
                 if ai and ai.get("has_interaction"):
                     hit = ai
-            # Severity known but no clinical text — fill it in live (max 4 per pass so
-            # the dispense decision stays fast) and cache it for next time.
-            if hit and not hit.get("mechanism") and ANTHROPIC_API_KEY and explain_calls < 4:
-                explained = explain_interaction_ai(
-                    a["active_substance"].split(",")[0].strip(),
-                    b["active_substance"].split(",")[0].strip(),
-                    hit["severity"],
-                    db,
-                )
-                explain_calls += 1
-                if explained:
-                    hit.update(explained)
 
             if hit:
                 interactions.append(
@@ -286,7 +279,8 @@ def verify(req: VerifyRequest):
                 "major_interactions": major_ix,
                 "moderate_interactions": moderate_ix,
                 "duration_ms": duration_ms,
-                "ai_used": (ai_calls + explain_calls) > 0,
+                "ai_used": ai_calls > 0,
+                "explanations_pending": sum(1 for i in interactions if not i.get("mechanism")),
             },
             "audit": audit,
         }

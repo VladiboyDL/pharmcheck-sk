@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { explainInteraction } from "../api/client";
 
 const VERDICT_STYLES = {
   DISPENSE: {
@@ -194,15 +195,37 @@ export default function DispenseResult({ data, onReset }) {
 
 function InteractionRow({ ix, compact }) {
   const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(
+    ix.mechanism ? { mechanism: ix.mechanism, management: ix.management, alternatives: ix.alternatives, source: ix.source } : null
+  );
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const st = IX_SEV[ix.severity] ?? IX_SEV["Mierna"];
-  const hasDetail = ix.mechanism || ix.management || ix.alternatives;
+
+  // Clinical text is fetched on first open rather than during the dispense pass,
+  // which keeps the verdict fast; DDInter ships severities without explanations.
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (!next || detail || loading || failed) return;
+    setLoading(true);
+    try {
+      const d = await explainInteraction({
+        substanceA: ix.substance_a,
+        substanceB: ix.substance_b,
+        severity: ix.severity,
+      });
+      setDetail(d);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className={`rounded-lg border px-3 py-2.5 ${st.box}`}>
-      <button
-        onClick={() => hasDetail && setOpen((o) => !o)}
-        className={`w-full flex items-start gap-2.5 text-left ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
-      >
+      <button onClick={toggle} className="w-full flex items-start gap-2.5 text-left cursor-pointer">
         <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${st.dot}`} />
         <div className="min-w-0 flex-1">
           <p className="text-xs text-slate-200">
@@ -210,33 +233,44 @@ function InteractionRow({ ix, compact }) {
             <span className="text-slate-500"> + </span>
             <span className="font-medium">{ix.drug_b}</span>
           </p>
-          {!compact && !open && ix.mechanism && (
-            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{ix.mechanism}</p>
+          {!compact && !open && detail?.mechanism && (
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{detail.mechanism}</p>
           )}
         </div>
         <span className={`text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 ${st.text}`}>
           {ix.severity}
         </span>
-        {hasDetail && (
-          <svg
-            className={`w-3.5 h-3.5 text-slate-600 flex-shrink-0 mt-0.5 transition-transform ${open ? "rotate-180" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeWidth="2" strokeLinecap="round" d="M6 9l6 6 6-6" />
-          </svg>
-        )}
+        <svg
+          className={`w-3.5 h-3.5 text-slate-600 flex-shrink-0 mt-0.5 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeWidth="2" strokeLinecap="round" d="M6 9l6 6 6-6" />
+        </svg>
       </button>
 
-      {open && hasDetail && (
+      {open && (
         <dl className="mt-2.5 pt-2.5 border-t border-slate-800 space-y-2 text-[11px]">
-          {ix.mechanism && <Detail label="Mechanizmus" value={ix.mechanism} />}
-          {ix.management && <Detail label="Odporúčanie" value={ix.management} />}
-          {ix.alternatives && <Detail label="Alternatívy" value={ix.alternatives} />}
-          <p className="text-[10px] text-slate-600 pt-1">
-            Zdroj: {ix.source === "db" ? "DDInter 2.0" : ix.source === "ai_cached" ? "AI (uložené)" : "AI analýza"}
-          </p>
+          {loading && (
+            <p className="flex items-center gap-2 text-slate-500">
+              <span className="w-3 h-3 border-2 border-slate-600 border-t-cyan-400 rounded-full animate-spin" />
+              Načítavam klinické vysvetlenie…
+            </p>
+          )}
+          {failed && !detail && (
+            <p className="text-slate-500">
+              Vysvetlenie pre túto dvojicu zatiaľ nie je k dispozícii. Závažnosť pochádza z DDInter 2.0.
+            </p>
+          )}
+          {detail?.mechanism && <Detail label="Mechanizmus" value={detail.mechanism} />}
+          {detail?.management && <Detail label="Odporúčanie" value={detail.management} />}
+          {detail?.alternatives && <Detail label="Alternatívy" value={detail.alternatives} />}
+          {detail && (
+            <p className="text-[10px] text-slate-600 pt-1">
+              Zdroj: {detail.source === "ai" ? "AI analýza (uložené do databázy)" : "DDInter 2.0"}
+            </p>
+          )}
         </dl>
       )}
     </div>
