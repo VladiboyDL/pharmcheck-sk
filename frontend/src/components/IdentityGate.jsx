@@ -105,13 +105,13 @@ export default function IdentityGate({ onVerified, onReset }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/60">
+    <div className="rounded-card border border-hairline bg-ink overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-hairline bg-surface">
         <div className="flex items-center gap-2.5">
-          <span className="w-6 h-6 rounded-md bg-cyan-500/15 text-cyan-300 grid place-items-center text-[11px] font-bold">
+          <span className="w-6 h-6 rounded-md bg-brand/15 text-brand grid place-items-center text-[11px] font-bold">
             1
           </span>
-          <h3 className="text-sm font-semibold text-slate-100">Overenie totožnosti pacienta</h3>
+          <h3 className="text-sm font-semibold text-txt">Overenie totožnosti pacienta</h3>
         </div>
         <div className="flex items-center gap-2">
           <StepDot active={["card", "reading"].includes(stage)} done={!!patient} label="Karta" />
@@ -122,7 +122,7 @@ export default function IdentityGate({ onVerified, onReset }) {
 
       <div className="p-5">
         {error && (
-          <div className="mb-4 rounded-lg border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300">
+          <div className="mb-4 rounded-sm2 border border-bad/40 bg-bad/10 px-3 py-2 text-xs text-bad">
             {error}
           </div>
         )}
@@ -133,26 +133,26 @@ export default function IdentityGate({ onVerified, onReset }) {
             <div className="flex flex-col items-center py-6">
               <div className="relative w-20 h-20 grid place-items-center">
                 <span
-                  className={`absolute inset-0 rounded-full border border-cyan-500/40 ${
+                  className={`absolute inset-0 rounded-full border border-brand/40 ${
                     stage === "reading" ? "animate-ping" : "animate-ping-slower"
                   }`}
                 />
-                <span className="absolute inset-3 rounded-full border border-cyan-500/25" />
-                <svg className="w-8 h-8 text-cyan-300 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="absolute inset-3 rounded-full border border-brand/25" />
+                <svg className="w-8 h-8 text-brand relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth="1.5" />
                   <path strokeWidth="1.5" strokeLinecap="round" d="M2 10h20M6 15h4" />
                 </svg>
               </div>
-              <p className="mt-3 text-sm font-medium text-slate-200">
+              <p className="mt-3 text-sm font-medium text-txt">
                 {stage === "reading" ? "Načítavam kartu…" : "Priložte kartu poistenca"}
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[11px] text-txt3 mt-0.5">
                 {stage === "reading" ? "NFC / ISO 14443-A" : "Bezkontaktné načítanie NFC"}
               </p>
             </div>
 
-            <div className="mt-2 pt-4 border-t border-slate-800">
-              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
+            <div className="mt-2 pt-4 border-t border-hairline">
+              <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3 mb-2.5">
                 Kliknutím simulujete priloženie karty
               </p>
               <div className="grid gap-2">
@@ -161,15 +161,15 @@ export default function IdentityGate({ onVerified, onReset }) {
                     key={c.card_id}
                     disabled={stage === "reading"}
                     onClick={() => handleCardTap(c.card_id)}
-                    className="text-left rounded-lg border border-slate-800 bg-slate-900/60 hover:border-cyan-700 hover:bg-slate-900 disabled:opacity-40 px-3 py-2.5 transition-colors group"
+                    className="text-left rounded-sm2 border border-hairline bg-surface hover:border-brand hover:bg-panel disabled:opacity-40 px-3 py-2.5 transition-colors group"
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-medium text-slate-100 group-hover:text-cyan-200">
+                      <span className="text-sm font-medium text-txt group-hover:text-brand">
                         {c.name}
                       </span>
-                      <span className="text-[10px] text-slate-500 tabular-nums">{c.age} r.</span>
+                      <span className="text-[10px] text-txt3 tabular">{c.age} r.</span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{c.summary}</p>
+                    <p className="text-[10px] text-txt3 mt-0.5 line-clamp-1">{c.summary}</p>
                   </button>
                 ))}
               </div>
@@ -181,7 +181,7 @@ export default function IdentityGate({ onVerified, onReset }) {
         {(stage === "biometric" || stage === "scanning") && patient && (
           <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
             <div>
-              <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 aspect-[4/3]">
+              <div className="relative rounded-sm2 overflow-hidden bg-panel border border-hairline aspect-[4/3]">
                 <video
                   ref={videoRef}
                   muted
@@ -192,11 +192,11 @@ export default function IdentityGate({ onVerified, onReset }) {
                 {cameraState !== "live" && (
                   <div className="absolute inset-0 grid place-items-center text-center px-6">
                     <div>
-                      <svg className="w-10 h-10 text-slate-700 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-10 h-10 text-txt3 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <circle cx="12" cy="9" r="3.2" strokeWidth="1.5" />
                         <path strokeWidth="1.5" strokeLinecap="round" d="M5.5 19a6.5 6.5 0 0113 0" />
                       </svg>
-                      <p className="text-[11px] text-slate-500 mt-2">
+                      <p className="text-[11px] text-txt3 mt-2">
                         {cameraState === "denied"
                           ? "Kamera nie je dostupná — overenie beží v simulovanom režime"
                           : "Spúšťam kameru…"}
@@ -209,11 +209,11 @@ export default function IdentityGate({ onVerified, onReset }) {
                 <div className="absolute inset-0 pointer-events-none">
                   <div
                     className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-52 rounded-[45%] border-2 transition-colors ${
-                      stage === "scanning" ? "border-cyan-400" : "border-slate-600/70"
+                      stage === "scanning" ? "border-brand" : "border-hairline2/70"
                     }`}
                   />
                   {stage === "scanning" && (
-                    <div className="absolute left-0 right-0 h-0.5 bg-cyan-400/80 shadow-[0_0_12px_2px_rgba(34,211,238,0.6)] animate-[scanSweep_1.6s_ease-in-out_infinite]" />
+                    <div className="absolute left-0 right-0 h-0.5 bg-brand/80 shadow-[0_0_12px_2px_rgba(46,123,255,0.6)] animate-[scanSweep_1.6s_ease-in-out_infinite]" />
                   )}
                   <Corner className="top-3 left-3 border-t-2 border-l-2" />
                   <Corner className="top-3 right-3 border-t-2 border-r-2" />
@@ -222,11 +222,11 @@ export default function IdentityGate({ onVerified, onReset }) {
                 </div>
 
                 {stage === "scanning" && (
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-lg bg-slate-950/85 backdrop-blur px-3 py-2">
-                    <span className="text-[10px] uppercase tracking-wider text-cyan-300">
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-sm2 bg-ink/85 backdrop-blur px-3 py-2">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-brand">
                       Porovnávam s referenčnou fotografiou
                     </span>
-                    <span className="text-sm font-bold text-cyan-300 tabular-nums">{score.toFixed(1)}%</span>
+                    <span className="text-sm font-bold text-brand tabular">{score.toFixed(1)}%</span>
                   </div>
                 )}
               </div>
@@ -235,11 +235,11 @@ export default function IdentityGate({ onVerified, onReset }) {
                 <button
                   onClick={handleFaceScan}
                   disabled={stage === "scanning"}
-                  className="flex-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-400 text-slate-950 font-semibold text-sm py-2.5 transition-colors"
+                  className="flex-1 rounded-sm2 bg-brand hover:bg-brand disabled:bg-slate-700 disabled:text-txt2 text-slate-950 font-semibold text-sm py-2.5 transition-colors"
                 >
                   {stage === "scanning" ? "Overujem…" : "Spustiť overenie tváre"}
                 </button>
-                <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
+                <label className="flex items-center gap-1.5 text-[11px] text-txt3 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={forceMismatch}
@@ -259,16 +259,16 @@ export default function IdentityGate({ onVerified, onReset }) {
         {stage === "done" && patient && biometric && (
           <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
             <div
-              className={`rounded-xl border p-5 ${
+              className={`rounded-sm2 border p-5 ${
                 biometric.verified
-                  ? "border-emerald-800 bg-emerald-950/40"
-                  : "border-red-800 bg-red-950/40"
+                  ? "border-ok/40 bg-ok/10"
+                  : "border-bad/40 bg-bad/10"
               }`}
             >
               <div className="flex items-start gap-3">
                 <div
-                  className={`w-9 h-9 rounded-lg grid place-items-center flex-shrink-0 ${
-                    biometric.verified ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+                  className={`w-9 h-9 rounded-sm2 grid place-items-center flex-shrink-0 ${
+                    biometric.verified ? "bg-ok/15 text-ok" : "bg-bad/15 text-bad"
                   }`}
                 >
                   {biometric.verified ? (
@@ -282,12 +282,12 @@ export default function IdentityGate({ onVerified, onReset }) {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className={`font-semibold ${biometric.verified ? "text-emerald-200" : "text-red-200"}`}>
+                  <p className={`font-semibold ${biometric.verified ? "text-ok" : "text-bad"}`}>
                     {biometric.verified ? "Totožnosť potvrdená" : "Totožnosť nepotvrdená"}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">{biometric.reason}</p>
+                  <p className="text-xs text-txt2 mt-0.5">{biometric.reason}</p>
                   {biometric.escalation && (
-                    <p className="text-xs text-red-300 mt-2 font-medium">{biometric.escalation}</p>
+                    <p className="text-xs text-bad mt-2 font-medium">{biometric.escalation}</p>
                   )}
                 </div>
               </div>
@@ -307,7 +307,7 @@ export default function IdentityGate({ onVerified, onReset }) {
                 <Metric label="Referencia" value={biometric.matched_name || "—"} />
               </dl>
 
-              <p className="mt-4 text-[10px] text-slate-500 leading-relaxed">
+              <p className="mt-4 text-[10px] text-txt3 leading-relaxed">
                 Simulované overenie. V produkcii sa porovnáva s fotografiou poistenca zo systému
                 zdravotnej poisťovne; snímka sa nikde neukladá.
               </p>
@@ -330,7 +330,7 @@ export default function IdentityGate({ onVerified, onReset }) {
 }
 
 function Corner({ className }) {
-  return <span className={`absolute w-5 h-5 border-cyan-500/50 ${className}`} />;
+  return <span className={`absolute w-5 h-5 border-brand/50 ${className}`} />;
 }
 
 function StepDot({ active, done, label }) {
@@ -338,20 +338,20 @@ function StepDot({ active, done, label }) {
     <div className="flex items-center gap-1.5">
       <span
         className={`w-1.5 h-1.5 rounded-full ${
-          done ? "bg-emerald-400" : active ? "bg-cyan-400 animate-pulse" : "bg-slate-700"
+          done ? "bg-emerald-400" : active ? "bg-brand animate-pulse" : "bg-slate-700"
         }`}
       />
-      <span className={`text-[10px] ${done || active ? "text-slate-300" : "text-slate-600"}`}>{label}</span>
+      <span className={`text-[10px] ${done || active ? "text-txt2" : "text-txt3"}`}>{label}</span>
     </div>
   );
 }
 
 function Metric({ label, value, tone }) {
-  const colour = tone === "good" ? "text-emerald-300" : tone === "bad" ? "text-red-300" : "text-slate-200";
+  const colour = tone === "good" ? "text-ok" : tone === "bad" ? "text-bad" : "text-txt";
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className={`font-semibold tabular-nums ${colour}`}>{value}</dd>
+      <dt className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3">{label}</dt>
+      <dd className={`font-semibold tabular ${colour}`}>{value}</dd>
     </div>
   );
 }
@@ -367,13 +367,13 @@ function PatientCard({ patient, cardMeta, onReset }) {
   if (patient.guardian) flags.push({ text: `Zákonný zástupca: ${patient.guardian}`, tone: "slate" });
 
   return (
-    <aside className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 h-fit">
+    <aside className="rounded-sm2 border border-hairline bg-surface p-4 h-fit">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold text-slate-100 leading-tight">{patient.name}</p>
-          <p className="text-[11px] text-slate-500 tabular-nums">{patient.birth_id_masked}</p>
+          <p className="font-semibold text-txt leading-tight">{patient.name}</p>
+          <p className="text-[11px] text-txt3 tabular">{patient.birth_id_masked}</p>
         </div>
-        <button onClick={onReset} className="text-[10px] text-slate-500 hover:text-slate-300 underline">
+        <button onClick={onReset} className="text-[10px] text-txt3 hover:text-txt2 underline">
           zmeniť
         </button>
       </div>
@@ -390,11 +390,11 @@ function PatientCard({ patient, cardMeta, onReset }) {
       </dl>
 
       {patient.chronic?.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-800">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">Chronická liečba</p>
+        <div className="mt-3 pt-3 border-t border-hairline">
+          <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3 mb-1.5">Chronická liečba</p>
           <ul className="space-y-0.5">
             {patient.chronic.map((c) => (
-              <li key={c} className="text-[11px] text-slate-400">
+              <li key={c} className="text-[11px] text-txt2">
                 {c}
               </li>
             ))}
@@ -403,16 +403,16 @@ function PatientCard({ patient, cardMeta, onReset }) {
       )}
 
       {flags.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+        <div className="mt-3 pt-3 border-t border-hairline space-y-1.5">
           {flags.map((f) => (
             <p
               key={f.text}
               className={`text-[11px] rounded px-2 py-1 ${
                 f.tone === "red"
-                  ? "bg-red-950/60 text-red-300"
+                  ? "bg-bad/10 text-bad"
                   : f.tone === "amber"
-                  ? "bg-amber-950/50 text-amber-300"
-                  : "bg-slate-800/60 text-slate-400"
+                  ? "bg-warn/10 text-warn"
+                  : "bg-surface2 text-txt2"
               }`}
             >
               {f.text}
@@ -422,7 +422,7 @@ function PatientCard({ patient, cardMeta, onReset }) {
       )}
 
       {cardMeta && (
-        <p className="mt-3 pt-3 border-t border-slate-800 text-[10px] text-slate-600">
+        <p className="mt-3 pt-3 border-t border-hairline text-[10px] text-txt3">
           {cardMeta.channel} · karta platná · poistenie aktívne
         </p>
       )}
@@ -433,8 +433,8 @@ function PatientCard({ patient, cardMeta, onReset }) {
 function Row({ label, value, highlight }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className={`tabular-nums text-right ${highlight ? "text-amber-300 font-semibold" : "text-slate-300"}`}>
+      <dt className="text-txt3">{label}</dt>
+      <dd className={`tabular text-right ${highlight ? "text-warn font-semibold" : "text-txt2"}`}>
         {value}
       </dd>
     </div>

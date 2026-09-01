@@ -2,24 +2,24 @@ import { useState } from "react";
 
 const SEVERITY_CONFIG = {
   "Závažná": {
-    bg: "bg-red-50",
-    border: "border-red-200",
-    badge: "bg-red-600 text-white",
-    icon: "text-red-600",
+    bg: "bg-surface",
+    border: "border-bad/40",
+    badge: "bg-brand text-txt",
+    icon: "text-bad",
     label: "Závažná",
   },
   "Stredná": {
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-    badge: "bg-amber-500 text-white",
-    icon: "text-amber-600",
+    bg: "bg-surface",
+    border: "border-warn/40",
+    badge: "bg-amber-500 text-txt",
+    icon: "text-warn",
     label: "Stredná",
   },
   "Mierna": {
-    bg: "bg-green-50",
-    border: "border-green-200",
-    badge: "bg-green-600 text-white",
-    icon: "text-green-600",
+    bg: "bg-surface",
+    border: "border-ok/40",
+    badge: "bg-brand text-txt",
+    icon: "text-ok",
     label: "Mierna",
   },
 };
@@ -33,7 +33,7 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
   const isStredna = interaction.severity === "Stredná";
 
   return (
-    <div className={`${config.bg} ${config.border} border rounded-xl overflow-hidden transition-all print:break-inside-avoid`}>
+    <div className={`${config.bg} ${config.border} border rounded-sm2 overflow-hidden transition-all print:break-inside-avoid`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left p-4 flex items-start gap-3"
@@ -57,7 +57,7 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className="font-semibold text-slate-900 hover:text-blue-700 transition-colors cursor-pointer text-sm"
+              className="font-semibold text-txt hover:text-brand transition-colors cursor-pointer text-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onDrugClick?.(interaction.drug_a);
@@ -65,11 +65,11 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
             >
               {interaction.drug_a.trade_name}
             </span>
-            <svg className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-txt2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
             <span
-              className="font-semibold text-slate-900 hover:text-blue-700 transition-colors cursor-pointer text-sm"
+              className="font-semibold text-txt hover:text-brand transition-colors cursor-pointer text-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onDrugClick?.(interaction.drug_b);
@@ -78,7 +78,7 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
               {interaction.drug_b.trade_name}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-txt3 mt-0.5">
             {interaction.drug_a.active_substance} &harr; {interaction.drug_b.active_substance}
           </p>
         </div>
@@ -93,7 +93,7 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
             {config.label}
           </span>
           <svg
-            className={`w-4 h-4 text-slate-400 transition-transform print:hidden ${expanded ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-txt2 transition-transform print:hidden ${expanded ? "rotate-180" : ""}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -120,7 +120,7 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
                 e.stopPropagation();
                 onResolve();
               }}
-              className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors flex items-center gap-1.5 print:hidden"
+              className="mt-2 text-xs font-medium text-brand hover:text-txt px-3 py-2 rounded-sm2 bg-brand/15 hover:bg-brand/25 transition-colors flex items-center gap-1.5 print:hidden"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -137,10 +137,10 @@ export default function InteractionCard({ interaction, onDrugClick, onResolve })
 function DetailSection({ title, text }) {
   return (
     <div>
-      <h4 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+      <h4 className="text-[10px] font-semibold text-txt2 uppercase tracking-wider mb-1">
         {title}
       </h4>
-      <p className="text-sm text-slate-700 leading-relaxed">{text}</p>
+      <p className="text-sm text-txt3 leading-relaxed">{text}</p>
     </div>
   );
 }

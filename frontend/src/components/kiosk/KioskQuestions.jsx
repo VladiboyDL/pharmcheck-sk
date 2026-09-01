@@ -52,7 +52,7 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
           {!anyPicked && (
             <button
               onClick={nothingHere}
-              className="w-full rounded-2xl border border-slate-700 text-slate-300 text-lg py-4 hover:border-slate-500 active:scale-[0.99] transition"
+              className="w-full rounded-pill border border-hairline2 text-txt2 text-lg py-4 hover:border-white/30 hover:text-txt active:scale-[0.99] transition"
             >
               Nič iné neberiem
             </button>
@@ -62,8 +62,8 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
     >
       <div>
         {greeting && (
-          <p className="text-center text-lg text-slate-300 mb-5">
-            Vitajte, <span className="text-slate-50 font-semibold">{greeting}</span>.{" "}
+          <p className="text-center text-lg text-txt2 mb-5">
+            Vitajte, <span className="text-txt font-semibold">{greeting}</span>.{" "}
             {questions.length === 1 ? "Mám jednu otázku." : `Mám ${questions.length} otázky.`}
           </p>
         )}
@@ -71,7 +71,7 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
         <div className="space-y-7">
           {questions.map((q) => (
             <fieldset key={q.id}>
-              <legend className="text-xl sm:text-2xl font-bold text-slate-50 tracking-tight text-balance">
+              <legend className="text-xl sm:text-2xl font-bold text-txt tracking-tight text-balance">
                 {q.short || q.prompt}
               </legend>
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
@@ -82,17 +82,17 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
                       key={o.id}
                       onClick={() => toggle(q, o.id)}
                       aria-pressed={active}
-                      className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-4 text-left text-base transition active:scale-[0.98] ${
+                      className={`flex items-center gap-3 rounded-card border-2 px-4 py-4 text-left text-base transition active:scale-[0.98] ${
                         active
                           ? o.exclusive
-                            ? "border-slate-500 bg-slate-800 text-slate-100"
-                            : "border-amber-500 bg-amber-950/40 text-amber-100"
-                          : "border-slate-800 bg-slate-900/50 text-slate-300 hover:border-slate-600"
+                            ? "border-hairline2 bg-surface2 text-txt"
+                            : "border-warn/40 bg-warn/10 text-warn"
+                          : "border-hairline bg-surface text-txt2 hover:border-hairline2"
                       }`}
                     >
                       <span
-                        className={`w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 ${
-                          active ? "bg-current/10" : "bg-slate-800/70"
+                        className={`w-9 h-9 rounded-sm2 grid place-items-center flex-shrink-0 ${
+                          active ? "bg-current/10" : "bg-surface2/70"
                         }`}
                       >
                         {o.icon ? (

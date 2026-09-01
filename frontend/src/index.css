@@ -1,24 +1,54 @@
+@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fragment+Mono&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: "Inter", system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  html {
+    background: #000000;
+  }
+
+  body {
+    @apply bg-ink text-txt font-sans antialiased;
+  }
+
+  /* Headings carry the brand's tight negative tracking; body copy does not, because
+     tight tracking on small text hurts legibility. */
+  h1, h2, h3 {
+    @apply tracking-tighter2;
+    text-wrap: balance;
+  }
+
+  /* Every interactive element keeps a visible focus ring — removing it is the most
+     common way an otherwise careful interface becomes unusable by keyboard. */
+  :focus-visible {
+    outline: 2px solid #2E7BFF;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Figures in tables, doses and timings must not jitter as values change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-@media print {
-  header, footer, nav {
-    display: none !important;
+@layer utilities {
+  /* A scrollable tab strip should not show a scrollbar over the brand ground. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
-  .print\:hidden {
-    display: none !important;
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
-  .print\:block {
-    display: block !important;
-  }
-  body {
-    font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

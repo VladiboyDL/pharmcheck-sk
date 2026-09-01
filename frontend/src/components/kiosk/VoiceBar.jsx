@@ -17,14 +17,14 @@ export default function VoiceBar({ status, speaking, muted, level, onToggleMute,
       <div
         className={`flex items-center gap-2.5 rounded-full border px-3 py-1.5 transition-colors ${
           failed
-            ? "border-slate-800 bg-slate-900/60"
+            ? "border-hairline bg-surface"
             : speaking
-            ? "border-cyan-700 bg-cyan-950/40"
-            : "border-slate-800 bg-slate-900/60"
+            ? "border-brand bg-brand/10"
+            : "border-hairline bg-surface"
         }`}
       >
         <Meter level={muted ? 0 : level} active={speaking && !muted} connecting={connecting} />
-        <span className={`text-[11px] ${speaking && !muted ? "text-cyan-300" : "text-slate-500"}`}>
+        <span className={`text-[11px] ${speaking && !muted ? "text-brand" : "text-txt3"}`}>
           {failed
             ? "Hlas nedostupný"
             : connecting
@@ -40,13 +40,13 @@ export default function VoiceBar({ status, speaking, muted, level, onToggleMute,
       <div className="flex-1" />
 
       {failed ? (
-        <button onClick={onRetry} className="text-[11px] text-slate-500 hover:text-slate-300">
+        <button onClick={onRetry} className="text-[11px] text-txt3 hover:text-txt2">
           skúsiť znova
         </button>
       ) : (
         <button
           onClick={onToggleMute}
-          className="text-[11px] text-slate-500 hover:text-slate-300"
+          className="text-[11px] text-txt3 hover:text-txt2"
           aria-pressed={muted}
         >
           {muted ? "zapnúť zvuk" : "stlmiť"}
@@ -71,7 +71,7 @@ function Meter({ level, active, connecting }) {
           <span
             key={i}
             className={`w-[3px] rounded-full transition-[height] duration-75 ${
-              active ? "bg-cyan-400" : connecting ? "bg-slate-600 animate-pulse" : "bg-slate-700"
+              active ? "bg-brand" : connecting ? "bg-slate-600 animate-pulse" : "bg-slate-700"
             }`}
             style={{ height: `${height}%` }}
           />

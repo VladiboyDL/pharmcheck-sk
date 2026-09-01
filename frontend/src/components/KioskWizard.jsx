@@ -310,9 +310,9 @@ export default function KioskWizard({ onSessionResult }) {
   return (
     <div className="mx-auto max-w-2xl">
       {/* Demo control, deliberately outside the patient flow. */}
-      <div className="mb-3 rounded-2xl border border-dashed border-slate-800 px-4 py-3">
+      <div className="mb-3 rounded-card border border-dashed border-hairline px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-slate-600 mr-1">
+          <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3 mr-1">
             Demo — situácia
           </span>
           {scenarios.map((sc) => (
@@ -322,10 +322,10 @@ export default function KioskWizard({ onSessionResult }) {
                 setScenarioId(sc.id);
                 restart();
               }}
-              className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+              className={`rounded-sm2 border px-2.5 py-1 text-xs transition ${
                 sc.id === scenarioId
-                  ? "border-cyan-700 bg-cyan-950/50 text-cyan-200"
-                  : "border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-hairline text-txt3 hover:border-hairline2 hover:text-txt2"
               }`}
             >
               {sc.label}
@@ -334,7 +334,7 @@ export default function KioskWizard({ onSessionResult }) {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+      <div className="rounded-card border border-hairline bg-ink overflow-hidden shadow-2xl">
         <VoiceBar
           status={voice.status}
           speaking={voice.speaking}
@@ -350,12 +350,12 @@ export default function KioskWizard({ onSessionResult }) {
             <div key={label} className="flex-1">
               <span
                 className={`block h-1 rounded-full transition-colors duration-300 ${
-                  i < stepIndex ? "bg-cyan-600" : i === stepIndex ? "bg-cyan-400" : "bg-slate-800"
+                  i < stepIndex ? "bg-brand" : i === stepIndex ? "bg-brand" : "bg-surface2"
                 }`}
               />
               <span
                 className={`mt-1.5 block text-[10px] ${
-                  i === stepIndex ? "text-cyan-300" : "text-slate-700"
+                  i === stepIndex ? "text-brand" : "text-txt3"
                 }`}
               >
                 {label}
@@ -377,12 +377,12 @@ export default function KioskWizard({ onSessionResult }) {
                       setMode("tap");
                       setPhase("identity");
                     }}
-                    className="w-full rounded-2xl border border-slate-700 text-slate-300 text-lg py-4 hover:border-slate-500 active:scale-[0.99] transition"
+                    className="w-full rounded-pill border border-hairline2 text-txt2 text-lg py-4 hover:border-white/30 hover:text-txt active:scale-[0.99] transition"
                   >
                     Budem klikať sám
                   </button>
                   {!voice.available && (
-                    <p className="text-center text-[11px] text-slate-600">
+                    <p className="text-center text-[11px] text-txt3">
                       Hlasový sprievodca práve nie je dostupný.
                     </p>
                   )}
@@ -390,8 +390,8 @@ export default function KioskWizard({ onSessionResult }) {
               }
             >
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 grid place-items-center mx-auto mb-7">
-                  <svg className="w-8 h-8 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-16 h-16 rounded-card bg-brand grid place-items-center mx-auto mb-7">
+                  <svg className="w-8 h-8 text-ink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 003 9c0 5.6 3.8 10.3 9 11.6 5.2-1.3 9-6 9-11.6 0-1-.1-2-.4-3z" />
                   </svg>
                 </div>
@@ -430,7 +430,7 @@ export default function KioskWizard({ onSessionResult }) {
                   <BigButton onClick={showResult} full>
                     Pokračovať
                   </BigButton>
-                  {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+                  {error && <p className="text-sm text-bad text-center">{error}</p>}
                 </div>
               }
             >
@@ -442,15 +442,15 @@ export default function KioskWizard({ onSessionResult }) {
                   {(scenario?.preview ?? []).map((item) => (
                     <li
                       key={item.trade_name}
-                      className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3.5"
+                      className="rounded-card border border-hairline bg-surface px-4 py-3.5"
                     >
-                      <p className="text-slate-100 text-base font-medium leading-tight">
+                      <p className="text-txt text-base font-medium leading-tight">
                         {item.trade_name}
                         {item.strength && (
-                          <span className="text-slate-500 font-normal"> · {item.strength}</span>
+                          <span className="text-txt3 font-normal"> · {item.strength}</span>
                         )}
                       </p>
-                      <p className="text-cyan-300 text-sm mt-0.5">{item.schedule}</p>
+                      <p className="text-brand text-sm mt-0.5">{item.schedule}</p>
                     </li>
                   ))}
                 </ul>
@@ -462,7 +462,7 @@ export default function KioskWizard({ onSessionResult }) {
         </div>
       </div>
 
-      <p className="mt-4 text-center text-[11px] text-slate-600">
+      <p className="mt-4 text-center text-[11px] text-txt3">
         Rovnaký klinický engine ako pultová konzola · identita a eRecept sú v deme simulované
       </p>
     </div>

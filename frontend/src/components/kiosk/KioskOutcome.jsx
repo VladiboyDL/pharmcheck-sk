@@ -68,8 +68,8 @@ export default function KioskOutcome({ data, onRestart }) {
         }
       >
         <div className="text-center">
-          <div className="w-20 h-20 rounded-3xl grid place-items-center mx-auto mb-6 bg-emerald-500">
-            <svg className="w-10 h-10 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-20 h-20 rounded-card grid place-items-center mx-auto mb-6 bg-ok">
+            <svg className="w-10 h-10 text-ink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -89,20 +89,20 @@ export default function KioskOutcome({ data, onRestart }) {
               {plan.map((entry) => (
                 <li
                   key={entry.trade_name}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3.5"
+                  className="rounded-card border border-hairline bg-surface px-4 py-3.5"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-300 grid place-items-center flex-shrink-0 mt-0.5">
+                    <span className="w-6 h-6 rounded-sm2 bg-ok/15 text-ok grid place-items-center flex-shrink-0 mt-0.5">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </span>
                     <div className="min-w-0">
-                      <p className="text-slate-100 font-medium leading-tight">{entry.trade_name}</p>
-                      <p className="text-cyan-300 text-sm mt-0.5">{entry.schedule}</p>
-                      {entry.when && <p className="text-slate-400 text-sm mt-0.5">{entry.when}</p>}
+                      <p className="text-txt font-medium leading-tight">{entry.trade_name}</p>
+                      <p className="text-brand text-sm mt-0.5">{entry.schedule}</p>
+                      {entry.when && <p className="text-txt2 text-sm mt-0.5">{entry.when}</p>}
                       {entry.avoid && (
-                        <p className="text-amber-300/90 text-sm mt-0.5">{entry.avoid}</p>
+                        <p className="text-warn text-sm mt-0.5">{entry.avoid}</p>
                       )}
                     </div>
                   </div>
@@ -140,21 +140,21 @@ export default function KioskOutcome({ data, onRestart }) {
           </div>
 
           {c.substitute && (
-            <div className="mt-8 mx-auto max-w-sm rounded-2xl border-2 border-emerald-700 bg-emerald-950/40 p-5">
-              <p className="text-[11px] uppercase tracking-wider text-emerald-400">
+            <div className="mt-8 mx-auto max-w-sm rounded-card border-2 border-ok/40 bg-ok/10 p-5">
+              <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-ok">
                 Dostanete namiesto toho
               </p>
-              <p className="mt-1.5 text-2xl font-bold text-emerald-100">{c.substitute.trade_name}</p>
-              <p className="text-sm text-emerald-300/80 mt-0.5">{c.substitute.active_substance}</p>
+              <p className="mt-1.5 text-2xl font-bold text-ok">{c.substitute.trade_name}</p>
+              <p className="text-sm text-ok/80 mt-0.5">{c.substitute.active_substance}</p>
             </div>
           )}
 
-          {c.caveat && <p className="mt-6 mx-auto max-w-md text-sm text-amber-300/90">{c.caveat}</p>}
+          {c.caveat && <p className="mt-6 mx-auto max-w-md text-sm text-warn">{c.caveat}</p>}
 
           {c.kind === "advice" && (
             <>
               {c.notify && <NotifyPrescriber data={data} subject={c.topic} detail={c.body} />}
-              <p className="mt-6 mx-auto max-w-md text-sm text-slate-500">
+              <p className="mt-6 mx-auto max-w-md text-sm text-txt3">
                 Lieky preto nevysadzujte ani si sami nemeňte dávku.
               </p>
             </>
@@ -195,7 +195,7 @@ function NotifyPrescriber({ data, subject, detail }) {
 
   if (state === "done") {
     return (
-      <div className="mt-6 mx-auto max-w-md rounded-2xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
+      <div className="mt-6 mx-auto max-w-md rounded-card border border-ok/40 bg-ok/10 px-4 py-3 text-sm text-ok">
         Správu sme pripravili pre {data.prescriber || "vášho lekára"}.
       </div>
     );
@@ -205,7 +205,7 @@ function NotifyPrescriber({ data, subject, detail }) {
     <button
       onClick={send}
       disabled={state === "sending"}
-      className="mt-6 mx-auto block rounded-2xl border-2 border-cyan-700 bg-cyan-950/40 px-6 py-3.5 text-cyan-200 text-base hover:border-cyan-500 active:scale-[0.99] transition disabled:opacity-50"
+      className="mt-6 mx-auto block rounded-card border-2 border-brand bg-brand/10 px-6 py-3.5 text-brand text-base hover:border-brand active:scale-[0.99] transition disabled:opacity-50"
     >
       {state === "sending" ? "Odosielam…" : "Upozorniť lekára, ktorý recept vystavil"}
     </button>
@@ -214,9 +214,9 @@ function NotifyPrescriber({ data, subject, detail }) {
 
 function Line({ text, tone }) {
   const styles = {
-    good: "border-emerald-900 bg-emerald-950/30 text-emerald-200",
-    warn: "border-amber-900 bg-amber-950/25 text-amber-200",
-    bad: "border-red-900 bg-red-950/30 text-red-200",
+    good: "border-ok/40 bg-ok/10 text-ok",
+    warn: "border-warn/40 bg-warn/10 text-warn",
+    bad: "border-bad/40 bg-bad/10 text-bad",
   };
-  return <div className={`rounded-xl border px-4 py-3 text-sm ${styles[tone]}`}>{text}</div>;
+  return <div className={`rounded-sm2 border px-4 py-3 text-sm ${styles[tone]}`}>{text}</div>;
 }

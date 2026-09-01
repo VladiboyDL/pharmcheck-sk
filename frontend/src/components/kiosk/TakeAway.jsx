@@ -49,24 +49,24 @@ export default function TakeAway({ data, onDone }) {
   return (
     <div className="min-h-[34rem] flex flex-col">
       <div className="flex-1 flex flex-col justify-center text-center">
-        <h2 className="text-3xl font-bold text-slate-50 tracking-tight">Vezmite si rozpis so sebou</h2>
-        <p className="mt-3 text-base text-slate-400 max-w-md mx-auto">
+        <h2 className="text-3xl font-bold text-txt tracking-tight">Vezmite si rozpis so sebou</h2>
+        <p className="mt-3 text-base text-txt2 max-w-md mx-auto">
           Naskenujte kód telefónom. Rozpis si uložíte a môžete si z neho nastaviť
           denné pripomienky.
         </p>
 
-        <div className="mt-7 mx-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="mt-7 mx-auto rounded-card border border-hairline bg-surface p-4">
           <canvas ref={canvasRef} aria-label="QR kód s rozpisom liekov" />
         </div>
 
-        <p className="mt-4 text-sm text-slate-500">
-          Na telefóne nájdete tlačidlo <span className="text-slate-300">Pridať pripomienky do kalendára</span>.
+        <p className="mt-4 text-sm text-txt3">
+          Na telefóne nájdete tlačidlo <span className="text-txt2">Pridať pripomienky do kalendára</span>.
         </p>
 
         {!showEmail && !sent && (
           <button
             onClick={() => setShowEmail(true)}
-            className="mt-6 text-sm text-slate-400 underline underline-offset-4 hover:text-slate-200"
+            className="mt-6 text-sm text-txt2 underline underline-offset-4 hover:text-txt"
           >
             Radšej poslať e-mailom
           </button>
@@ -80,12 +80,12 @@ export default function TakeAway({ data, onDone }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="vas@email.sk"
-              className="w-full rounded-2xl bg-slate-900 border-2 border-slate-800 focus:border-cyan-600 focus:outline-none text-slate-100 text-lg px-5 py-4 text-center"
+              className="w-full rounded-card bg-panel border-2 border-hairline focus:border-brand focus:outline-none text-txt text-lg px-5 py-4 text-center"
             />
             <button
               type="submit"
               disabled={sending || !email}
-              className="mt-3 w-full rounded-2xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-100 text-lg py-4 transition"
+              className="mt-3 w-full rounded-card bg-surface2 hover:bg-slate-700 disabled:opacity-40 text-txt text-lg py-4 transition"
             >
               {sending ? "Odosielam…" : "Odoslať"}
             </button>
@@ -94,10 +94,10 @@ export default function TakeAway({ data, onDone }) {
 
         {sent && (
           <div
-            className={`mt-6 mx-auto max-w-sm rounded-2xl border px-4 py-3 text-sm ${
+            className={`mt-6 mx-auto max-w-sm rounded-card border px-4 py-3 text-sm ${
               sent.sent
-                ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
-                : "border-slate-700 bg-slate-900/60 text-slate-400"
+                ? "border-ok/40 bg-ok/10 text-ok"
+                : "border-hairline2 bg-surface text-txt2"
             }`}
           >
             {sent.sent ? `Rozpis sme odoslali na ${email}.` : sent.reason}

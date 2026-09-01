@@ -51,19 +51,19 @@ export default function ImpactDashboard({ sessionResults = [] }) {
   return (
     <div className="space-y-5">
       {/* ── Measured ────────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+      <section className="rounded-card border border-hairline bg-ink p-5">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          <h2 className="text-sm font-semibold text-slate-100">Namerané v tejto relácii</h2>
-          <span className="text-[10px] text-slate-600">skutočné výstupy systému, nie odhad</span>
+          <h2 className="text-sm font-semibold text-txt">Namerané v tejto relácii</h2>
+          <span className="text-[10px] text-txt3">skutočné výstupy systému, nie odhad</span>
         </div>
 
         {measured.runs === 0 ? (
-          <p className="text-xs text-slate-500 py-6 text-center">
+          <p className="text-xs text-txt3 py-6 text-center">
             Zatiaľ neprebehol žiadny výdaj. Prejdite na kartu „Výdajové okno“ a spustite kontrolu.
           </p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-px rounded-xl overflow-hidden bg-slate-800/60">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-px rounded-sm2 overflow-hidden bg-surface2">
             <Stat value={measured.runs} label="výdajov" />
             <Stat value={measured.checks.toLocaleString("sk-SK")} label="kontrol" />
             <Stat value={measured.pairs} label="liekových párov" />
@@ -74,15 +74,15 @@ export default function ImpactDashboard({ sessionResults = [] }) {
         )}
 
         {stats && (
-          <div className="mt-4 pt-4 border-t border-slate-800 flex flex-wrap gap-x-6 gap-y-2 text-[11px] text-slate-500">
+          <div className="mt-4 pt-4 border-t border-hairline flex flex-wrap gap-x-6 gap-y-2 text-[11px] text-txt3">
             <span>
-              Databáza: <span className="text-slate-300 font-medium">{stats.total_drugs.toLocaleString("sk-SK")}</span> liekov
+              Databáza: <span className="text-txt2 font-medium">{stats.total_drugs.toLocaleString("sk-SK")}</span> liekov
             </span>
             <span>
-              <span className="text-slate-300 font-medium">{stats.total_interactions.toLocaleString("sk-SK")}</span> interakčných záznamov
+              <span className="text-txt2 font-medium">{stats.total_interactions.toLocaleString("sk-SK")}</span> interakčných záznamov
             </span>
             <span>
-              z toho <span className="text-red-400 font-medium">{stats.severity_breakdown["Závažná"]?.toLocaleString("sk-SK")}</span> závažných
+              z toho <span className="text-bad font-medium">{stats.severity_breakdown["Závažná"]?.toLocaleString("sk-SK")}</span> závažných
             </span>
             <span>Zdroj: DDInter 2.0 + ŠÚKL register</span>
           </div>
@@ -90,18 +90,18 @@ export default function ImpactDashboard({ sessionResults = [] }) {
       </section>
 
       {/* ── Audit trail ─────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+      <section className="rounded-card border border-hairline bg-ink p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-100">Auditný záznam výdajov</h2>
-          <span className="text-[10px] text-slate-600">append-only · reťazec opatrovníctva</span>
+          <h2 className="text-sm font-semibold text-txt">Auditný záznam výdajov</h2>
+          <span className="text-[10px] text-txt3">append-only · reťazec opatrovníctva</span>
         </div>
         {log.length === 0 ? (
-          <p className="text-xs text-slate-500 py-4 text-center">Zatiaľ prázdny.</p>
+          <p className="text-xs text-txt3 py-4 text-center">Zatiaľ prázdny.</p>
         ) : (
           <div className="overflow-x-auto -mx-5 px-5">
             <table className="w-full text-xs min-w-[560px]">
               <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-800">
+                <tr className="text-left text-txt3 border-b border-hairline">
                   <th className="pb-2 font-medium">ID záznamu</th>
                   <th className="pb-2 font-medium">Čas</th>
                   <th className="pb-2 font-medium">Pacient</th>
@@ -109,13 +109,13 @@ export default function ImpactDashboard({ sessionResults = [] }) {
                   <th className="pb-2 font-medium text-right">Rozhodnutie</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70">
+              <tbody className="divide-y divide-hairline">
                 {log.map((e) => (
                   <tr key={e.audit_id}>
-                    <td className="py-2 font-mono text-slate-400">{e.audit_id}</td>
-                    <td className="py-2 text-slate-500 tabular-nums">{e.timestamp.replace("T", " ")}</td>
-                    <td className="py-2 text-slate-300">{e.patient || "—"}</td>
-                    <td className="py-2 text-right text-slate-400 tabular-nums">{e.checks_run}</td>
+                    <td className="py-2 font-mono text-txt2">{e.audit_id}</td>
+                    <td className="py-2 text-txt3 tabular">{e.timestamp.replace("T", " ")}</td>
+                    <td className="py-2 text-txt2">{e.patient || "—"}</td>
+                    <td className="py-2 text-right text-txt2 tabular">{e.checks_run}</td>
                     <td className="py-2 text-right">
                       <VerdictChip verdict={e.verdict} />
                     </td>
@@ -128,12 +128,12 @@ export default function ImpactDashboard({ sessionResults = [] }) {
       </section>
 
       {/* ── Modelled ────────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+      <section className="rounded-card border border-hairline bg-ink p-5">
         <div className="flex items-center gap-2 mb-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-          <h2 className="text-sm font-semibold text-slate-100">Modelovaný dopad pri nasadení</h2>
+          <span className="w-1.5 h-1.5 rounded-full bg-warn" />
+          <h2 className="text-sm font-semibold text-txt">Modelovaný dopad pri nasadení</h2>
         </div>
-        <p className="text-[11px] text-slate-500 mb-4">
+        <p className="text-[11px] text-txt3 mb-4">
           Projekcia, nie nameraná hodnota. Všetky vstupy sú upraviteľné — čísla sa prepočítajú okamžite.
         </p>
 
@@ -166,10 +166,10 @@ export default function ImpactDashboard({ sessionResults = [] }) {
         </div>
 
         <details className="mt-4 group">
-          <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300 select-none">
+          <summary className="text-[11px] text-txt3 cursor-pointer hover:text-txt2 select-none">
             Predpoklady modelu
           </summary>
-          <ul className="mt-2 space-y-1 text-[11px] text-slate-500 pl-4 list-disc marker:text-slate-700">
+          <ul className="mt-2 space-y-1 text-[11px] text-txt3 pl-4 list-disc marker:text-txt3">
             <li>Na každej pobočke zostáva jeden vyškolený pracovník — model počíta úsporu len nad tento základ.</li>
             <li>Odvody zamestnávateľa 35,2 % podľa slovenskej legislatívy.</li>
             <li>300 prevádzkových dní v roku.</li>
@@ -227,15 +227,15 @@ const MATURITY = [
 
 function Maturity() {
   const tone = {
-    live: ["border-emerald-900/70 bg-emerald-950/20", "text-emerald-300", "bg-emerald-400"],
-    simulated: ["border-amber-900/70 bg-amber-950/15", "text-amber-300", "bg-amber-400"],
-    pilot: ["border-slate-800 bg-slate-900/40", "text-slate-400", "bg-slate-600"],
+    live: ["border-ok/70 bg-ok/10", "text-ok", "bg-emerald-400"],
+    simulated: ["border-warn/40 bg-warn/10", "text-warn", "bg-warn"],
+    pilot: ["border-hairline bg-surface", "text-txt2", "bg-slate-600"],
   };
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-      <h2 className="text-sm font-semibold text-slate-100">Stav platformy</h2>
-      <p className="text-[11px] text-slate-500 mt-0.5 mb-4">
+    <section className="rounded-card border border-hairline bg-ink p-5">
+      <h2 className="text-sm font-semibold text-txt">Stav platformy</h2>
+      <p className="text-[11px] text-txt3 mt-0.5 mb-4">
         Čo je postavené, čo je v deme simulované a čo prináša pilot — bez prikrášľovania.
       </p>
 
@@ -243,16 +243,16 @@ function Maturity() {
         {MATURITY.map((col) => {
           const [box, text, dot] = tone[col.stage];
           return (
-            <div key={col.stage} className={`rounded-xl border p-4 ${box}`}>
+            <div key={col.stage} className={`rounded-sm2 border p-4 ${box}`}>
               <div className="flex items-center gap-2">
                 <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
                 <h3 className={`text-xs font-semibold ${text}`}>{col.title}</h3>
               </div>
-              <p className="text-[10px] text-slate-500 mt-1 mb-2.5">{col.detail}</p>
+              <p className="text-[10px] text-txt3 mt-1 mb-2.5">{col.detail}</p>
               <ul className="space-y-1.5">
                 {col.items.map((i) => (
-                  <li key={i} className="text-[11px] text-slate-400 leading-snug flex gap-1.5">
-                    <span className="text-slate-700 flex-shrink-0">—</span>
+                  <li key={i} className="text-[11px] text-txt2 leading-snug flex gap-1.5">
+                    <span className="text-txt3 flex-shrink-0">—</span>
                     <span>{i}</span>
                   </li>
                 ))}
@@ -267,20 +267,20 @@ function Maturity() {
 
 function VerdictChip({ verdict }) {
   const map = {
-    DISPENSE: ["bg-emerald-500/15 text-emerald-300", "VYDAŤ"],
-    CONSULT: ["bg-amber-500/15 text-amber-300", "KONZULTOVAŤ"],
-    BLOCK: ["bg-red-500/15 text-red-300", "NEVYDAŤ"],
+    DISPENSE: ["bg-ok/15 text-ok", "VYDAŤ"],
+    CONSULT: ["bg-warn/15 text-warn", "KONZULTOVAŤ"],
+    BLOCK: ["bg-bad/15 text-bad", "NEVYDAŤ"],
   };
-  const [cls, label] = map[verdict] ?? ["bg-slate-800 text-slate-400", verdict];
+  const [cls, label] = map[verdict] ?? ["bg-surface2 text-txt2", verdict];
   return <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{label}</span>;
 }
 
 function Stat({ value, label, tone }) {
-  const colour = tone === "red" ? "text-red-300" : tone === "amber" ? "text-amber-300" : "text-slate-100";
+  const colour = tone === "red" ? "text-bad" : tone === "amber" ? "text-warn" : "text-txt";
   return (
-    <div className="bg-slate-950 px-3 py-3 text-center">
-      <p className={`text-lg font-bold tabular-nums leading-none ${colour}`}>{value}</p>
-      <p className="text-[10px] text-slate-500 mt-1">{label}</p>
+    <div className="bg-ink px-3 py-3 text-center">
+      <p className={`text-xl font-mono tabular leading-none ${colour}`}>{value}</p>
+      <p className="text-[10px] text-txt3 mt-1">{label}</p>
     </div>
   );
 }
@@ -288,16 +288,16 @@ function Stat({ value, label, tone }) {
 function BigStat({ value, label, detail, tone }) {
   const ring =
     tone === "emerald"
-      ? "border-emerald-900/70 bg-emerald-950/25"
+      ? "border-ok/70 bg-ok/10"
       : tone === "cyan"
-      ? "border-cyan-900/70 bg-cyan-950/25"
-      : "border-slate-800 bg-slate-900/40";
-  const text = tone === "emerald" ? "text-emerald-300" : tone === "cyan" ? "text-cyan-300" : "text-slate-200";
+      ? "border-brand/40 bg-brand/10"
+      : "border-hairline bg-surface";
+  const text = tone === "emerald" ? "text-ok" : tone === "cyan" ? "text-brand" : "text-txt";
   return (
-    <div className={`rounded-xl border p-4 ${ring}`}>
-      <p className={`text-2xl font-bold tabular-nums ${text}`}>{value}</p>
-      <p className="text-xs text-slate-300 mt-1">{label}</p>
-      <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">{detail}</p>
+    <div className={`rounded-sm2 border p-4 ${ring}`}>
+      <p className={`text-3xl font-mono tabular ${text}`}>{value}</p>
+      <p className="text-xs text-txt2 mt-1">{label}</p>
+      <p className="text-[10px] text-txt3 mt-1.5 leading-relaxed">{detail}</p>
     </div>
   );
 }
@@ -305,7 +305,7 @@ function BigStat({ value, label, detail, tone }) {
 function Input({ label, value, onChange, min, max, step }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3">{label}</span>
       <input
         type="number"
         value={value}
@@ -313,7 +313,7 @@ function Input({ label, value, onChange, min, max, step }) {
         max={max}
         step={step}
         onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value) || min)))}
-        className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-800 focus:border-cyan-700 focus:outline-none text-slate-200 text-sm tabular-nums px-3 py-2"
+        className="mt-1 w-full rounded-sm2 bg-panel border border-hairline focus:border-brand focus:outline-none text-txt text-sm tabular px-3 py-2"
       />
     </label>
   );

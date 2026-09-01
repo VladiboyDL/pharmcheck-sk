@@ -46,36 +46,36 @@ export default function IntakeInterview({ cardId, scenarioId, value, onChange, d
 
   return (
     <div
-      className={`rounded-2xl border bg-slate-950 overflow-hidden transition-opacity ${
-        disabled ? "border-slate-900 opacity-40 pointer-events-none" : "border-slate-800"
+      className={`rounded-card border bg-ink overflow-hidden transition-opacity ${
+        disabled ? "border-hairline opacity-40 pointer-events-none" : "border-hairline"
       }`}
     >
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/60">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-hairline bg-surface">
         <div className="flex items-center gap-2.5">
-          <span className="w-6 h-6 rounded-md bg-cyan-500/15 text-cyan-300 grid place-items-center text-[11px] font-bold">
+          <span className="w-6 h-6 rounded-md bg-brand/15 text-brand grid place-items-center text-[11px] font-bold">
             3
           </span>
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">Rozhovor pred vyhodnotením</h3>
-            <p className="text-[11px] text-slate-500">Čo na recepte nie je — a práve tam býva riziko</p>
+            <h3 className="text-sm font-semibold text-txt">Rozhovor pred vyhodnotením</h3>
+            <p className="text-[11px] text-txt3">Čo na recepte nie je — a práve tam býva riziko</p>
           </div>
         </div>
-        <div className="text-[11px] text-slate-500 tabular-nums">
+        <div className="text-[11px] text-txt3 tabular">
           {answered}/{questions.length} zodpovedaných
-          {flagged > 0 && <span className="ml-2 text-amber-400">{flagged}× na kontrolu</span>}
+          {flagged > 0 && <span className="ml-2 text-warn">{flagged}× na kontrolu</span>}
         </div>
       </div>
 
       <div className="p-5">
-        {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+        {error && <p className="text-xs text-bad mb-3">{error}</p>}
 
         <div className="space-y-5">
           {questions.map((q) => {
             const chosen = value[q.id] || [];
             return (
               <fieldset key={q.id}>
-                <legend className="text-sm text-slate-200 font-medium">{q.prompt}</legend>
-                <p className="text-[11px] text-slate-500 mt-0.5 mb-2.5">{q.hint}</p>
+                <legend className="text-sm text-txt font-medium">{q.prompt}</legend>
+                <p className="text-[11px] text-txt3 mt-0.5 mb-2.5">{q.hint}</p>
                 <div className="flex flex-wrap gap-2">
                   {q.options.map((o) => {
                     const active = chosen.includes(o.id);
@@ -86,12 +86,12 @@ export default function IntakeInterview({ cardId, scenarioId, value, onChange, d
                         type="button"
                         aria-pressed={active}
                         onClick={() => toggle(q, o.id)}
-                        className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                        className={`rounded-sm2 border px-3 py-1.5 text-xs transition-colors ${
                           active
                             ? neutral
-                              ? "border-slate-600 bg-slate-800 text-slate-200"
-                              : "border-amber-600 bg-amber-950/50 text-amber-200"
-                            : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                              ? "border-hairline2 bg-surface2 text-txt"
+                              : "border-warn/40 bg-warn/10 text-warn"
+                            : "border-hairline bg-surface text-txt2 hover:border-hairline2 hover:text-txt"
                         }`}
                       >
                         {o.label}
@@ -104,7 +104,7 @@ export default function IntakeInterview({ cardId, scenarioId, value, onChange, d
           })}
         </div>
 
-        <p className="mt-5 pt-4 border-t border-slate-800 text-[11px] text-slate-500 leading-relaxed">
+        <p className="mt-5 pt-4 border-t border-hairline text-[11px] text-txt3 leading-relaxed">
           Odpovede idú do rovnakého klinického enginu ako recept. Voľnopredajné lieky a
           doplnky sa kontrolujú na interakcie, duplicitu aj kumulatívne riziko — presne to,
           čo predpisujúci lekár nemá ako vedieť.

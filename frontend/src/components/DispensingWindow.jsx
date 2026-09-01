@@ -86,23 +86,23 @@ export default function DispensingWindow({ onSessionResult }) {
 
       {/* ── Step 2: prescription ──────────────────────────────────────────── */}
       <div
-        className={`rounded-2xl border bg-slate-950 overflow-hidden transition-opacity ${
-          identity ? "border-slate-800 opacity-100" : "border-slate-900 opacity-40 pointer-events-none"
+        className={`rounded-card border bg-ink overflow-hidden transition-opacity ${
+          identity ? "border-hairline opacity-100" : "border-hairline opacity-40 pointer-events-none"
         }`}
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/60">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-hairline bg-surface">
           <div className="flex items-center gap-2.5">
-            <span className="w-6 h-6 rounded-md bg-cyan-500/15 text-cyan-300 grid place-items-center text-[11px] font-bold">
+            <span className="w-6 h-6 rounded-md bg-brand/15 text-brand grid place-items-center text-[11px] font-bold">
               2
             </span>
-            <h3 className="text-sm font-semibold text-slate-100">eRecept</h3>
+            <h3 className="text-sm font-semibold text-txt">eRecept</h3>
           </div>
-          {scenario && <span className="text-[11px] text-slate-500">{scenario.prescriber}</span>}
+          {scenario && <span className="text-[11px] text-txt3">{scenario.prescriber}</span>}
         </div>
 
         <div className="p-5">
           <div className="mb-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-txt3 mb-2">
               Demo — klinická situácia toho istého pacienta
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -110,10 +110,10 @@ export default function DispensingWindow({ onSessionResult }) {
                 <button
                   key={sc.id}
                   onClick={() => pickScenario(sc)}
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                  className={`rounded-sm2 border px-2.5 py-1.5 text-xs transition-colors ${
                     sc.id === scenarioId
-                      ? "border-cyan-700 bg-cyan-950/50 text-cyan-200"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600"
+                      ? "border-brand bg-brand/10 text-brand"
+                      : "border-hairline bg-surface text-txt2 hover:border-hairline2"
                   }`}
                 >
                   {sc.label}
@@ -121,7 +121,7 @@ export default function DispensingWindow({ onSessionResult }) {
               ))}
             </div>
             {scenario && (
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-[11px] text-txt3">
                 {scenario.subtitle} — text receptu môžete ľubovoľne upraviť.
               </p>
             )}
@@ -133,12 +133,12 @@ export default function DispensingWindow({ onSessionResult }) {
             rows={Math.max(5, text.split("\n").length + 1)}
             spellCheck={false}
             placeholder={"NÁZOV PRÍPRAVKU 500 mg tbl   1-0-1\nĎALŠÍ LIEK 20 mg            1-0-0"}
-            className="w-full rounded-lg bg-slate-900 border border-slate-800 focus:border-cyan-700 focus:outline-none text-slate-200 font-mono text-xs leading-relaxed p-3.5 resize-y"
+            className="w-full rounded-sm2 bg-panel border border-hairline focus:border-brand focus:outline-none text-txt font-mono text-xs leading-relaxed p-3.5 resize-y"
           />
 
-          <p className="mt-3 text-[11px] text-slate-600">
-            Podporované zápisy dávkovania: <code className="text-slate-500">1-0-1</code>,{" "}
-            <code className="text-slate-500">2x denne</code>, <code className="text-slate-500">1/2-0-0</code>
+          <p className="mt-3 text-[11px] text-txt3">
+            Podporované zápisy dávkovania: <code className="text-txt3">1-0-1</code>,{" "}
+            <code className="text-txt3">2x denne</code>, <code className="text-txt3">1/2-0-0</code>
           </p>
         </div>
       </div>
@@ -152,9 +152,9 @@ export default function DispensingWindow({ onSessionResult }) {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[11px] text-slate-500">
+        <div className="text-[11px] text-txt3">
           {!identityOk && identity && (
-            <span className="text-red-400">
+            <span className="text-bad">
               Totožnosť nebola potvrdená — kontrola prebehne, ale výdaj bude zablokovaný.
             </span>
           )}
@@ -162,11 +162,11 @@ export default function DispensingWindow({ onSessionResult }) {
         <button
           onClick={handleVerify}
           disabled={loading || !text.trim() || !identity}
-          className="rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-semibold text-sm px-7 py-3 transition-colors flex items-center gap-2"
+          className="rounded-sm2 bg-brand hover:bg-brand disabled:bg-surface2 disabled:text-txt3 text-slate-950 font-semibold text-sm px-7 py-3 transition-colors flex items-center gap-2"
         >
           {loading ? (
             <>
-              <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+              <span className="w-3.5 h-3.5 border-2 border-hairline border-t-transparent rounded-full animate-spin" />
               Kontrolujem…
             </>
           ) : (
@@ -176,7 +176,7 @@ export default function DispensingWindow({ onSessionResult }) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300">
+        <div className="rounded-sm2 border border-bad/40 bg-bad/10 px-3 py-2 text-xs text-bad">
           {error}
         </div>
       )}
@@ -186,19 +186,19 @@ export default function DispensingWindow({ onSessionResult }) {
 
 function Header() {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 px-5 py-4">
+    <div className="rounded-card border border-hairline bg-brand/15 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-100">Výdajové okno</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h2 className="text-base font-semibold text-txt">Výdajové okno</h2>
+          <p className="text-xs text-txt3 mt-0.5">
             Overenie totožnosti, receptu, interakcií a dávkovania v jednom priechode
           </p>
         </div>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-900 px-2.5 py-1">
+          <span className="rounded-full bg-ok/10 text-ok border border-ok/40 px-2.5 py-1">
             Klinický engine — živé dáta
           </span>
-          <span className="rounded-full bg-slate-800 text-slate-400 border border-slate-700 px-2.5 py-1">
+          <span className="rounded-full bg-surface2 text-txt2 border border-hairline2 px-2.5 py-1">
             Identita — simulovaná
           </span>
         </div>

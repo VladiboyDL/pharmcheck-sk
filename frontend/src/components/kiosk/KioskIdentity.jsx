@@ -124,8 +124,8 @@ export default function KioskIdentity({ onDone, controls }) {
             scanning={stage === "reading"}
           >
             <div
-              className={`absolute inset-x-[12%] top-1/2 -translate-y-1/2 aspect-[1.586] rounded-xl border-2 transition-colors ${
-                stage === "reading" ? "border-cyan-400" : "border-slate-500/70 border-dashed"
+              className={`absolute inset-x-[12%] top-1/2 -translate-y-1/2 aspect-[1.586] rounded-sm2 border-2 transition-colors ${
+                stage === "reading" ? "border-brand" : "border-hairline2/70 border-dashed"
               }`}
             />
           </Viewfinder>
@@ -164,7 +164,7 @@ export default function KioskIdentity({ onDone, controls }) {
         >
           <div
             className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-48 rounded-[45%] border-2 transition-colors ${
-              stage === "scanning" ? "border-cyan-400" : "border-slate-500/60"
+              stage === "scanning" ? "border-brand" : "border-hairline2/60"
             }`}
           />
         </Viewfinder>
@@ -174,7 +174,7 @@ export default function KioskIdentity({ onDone, controls }) {
             Overenie totožnosti
           </Title>
           {cardMeta && (
-            <p className="mt-3 text-center text-[11px] text-slate-600">
+            <p className="mt-3 text-center text-[11px] text-txt3">
               {cardMeta.channel} · {cardMeta.patient.birth_id_masked} · {cardMeta.patient.insurer}
             </p>
           )}
@@ -187,7 +187,7 @@ export default function KioskIdentity({ onDone, controls }) {
 
 function Viewfinder({ videoRef, cameraOk, aspect, scanning, children }) {
   return (
-    <div className={`relative w-full ${aspect} rounded-2xl overflow-hidden bg-slate-900 border border-slate-800`}>
+    <div className={`relative w-full ${aspect} rounded-card overflow-hidden bg-panel border border-hairline`}>
       <video
         ref={videoRef}
         muted
@@ -197,7 +197,7 @@ function Viewfinder({ videoRef, cameraOk, aspect, scanning, children }) {
       />
       {!cameraOk && (
         <div className="absolute inset-0 grid place-items-center px-6 text-center">
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-txt3">
             Kamera nie je dostupná — beží simulovaný režim
           </p>
         </div>
@@ -205,7 +205,7 @@ function Viewfinder({ videoRef, cameraOk, aspect, scanning, children }) {
       <div className="absolute inset-0 pointer-events-none">
         {children}
         {scanning && (
-          <div className="absolute left-0 right-0 h-0.5 bg-cyan-400/80 shadow-[0_0_14px_3px_rgba(34,211,238,0.55)] animate-[kioskSweep_1.4s_ease-in-out_infinite]" />
+          <div className="absolute left-0 right-0 h-0.5 bg-brand/80 shadow-[0_0_14px_3px_rgba(46,123,255,0.55)] animate-[kioskSweep_1.4s_ease-in-out_infinite]" />
         )}
       </div>
     </div>

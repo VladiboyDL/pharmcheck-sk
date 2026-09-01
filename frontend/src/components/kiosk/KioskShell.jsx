@@ -14,25 +14,26 @@ export function Screen({ children, footer }) {
 export function Title({ children, sub }) {
   return (
     <div className="text-center">
-      <h2 className="text-3xl sm:text-4xl font-bold text-slate-50 tracking-tight leading-tight text-balance">
+      <h2 className="text-3xl sm:text-[2.6rem] font-semibold text-txt tracking-tighter2 leading-[1.05] text-balance">
         {children}
       </h2>
-      {sub && <p className="mt-3 text-base text-slate-400 max-w-lg mx-auto text-balance">{sub}</p>}
+      {sub && <p className="mt-4 text-base text-txt2 max-w-lg mx-auto text-balance leading-relaxed">{sub}</p>}
     </div>
   );
 }
 
 export function BigButton({ children, onClick, tone = "primary", disabled, full }) {
   const styles = {
-    primary: "bg-cyan-400 hover:bg-cyan-300 text-slate-950",
-    ghost: "bg-transparent border border-slate-700 hover:border-slate-500 text-slate-300",
-    danger: "bg-red-500 hover:bg-red-400 text-white",
+    // Black on the accent measures 5.4:1 where white is 3.9:1.
+    primary: "bg-brand hover:bg-brandDeep hover:text-txt text-ink",
+    ghost: "bg-transparent border border-hairline2 hover:border-white/30 text-txt2 hover:text-txt",
+    danger: "bg-bad hover:brightness-110 text-ink",
   };
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-2xl font-semibold text-lg px-8 py-4 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`rounded-pill font-semibold text-lg px-8 py-4 transition-all duration-200 active:scale-[0.985] disabled:opacity-40 disabled:cursor-not-allowed ${
         styles[tone]
       } ${full ? "w-full" : ""}`}
     >
@@ -48,7 +49,7 @@ export function Rail({ steps, current }) {
         <span
           key={i}
           className={`h-1 rounded-full transition-all duration-300 ${
-            i < current ? "w-6 bg-cyan-500" : i === current ? "w-10 bg-cyan-400" : "w-6 bg-slate-800"
+            i < current ? "w-6 bg-brand" : i === current ? "w-10 bg-brand" : "w-6 bg-surface2"
           }`}
         />
       ))}
@@ -58,10 +59,10 @@ export function Rail({ steps, current }) {
 
 export function Badge({ children, tone = "slate" }) {
   const styles = {
-    slate: "bg-slate-800 text-slate-300",
-    good: "bg-emerald-500/15 text-emerald-300",
-    warn: "bg-amber-500/15 text-amber-300",
-    bad: "bg-red-500/15 text-red-300",
+    slate: "bg-surface2 text-txt2",
+    good: "bg-ok/15 text-ok",
+    warn: "bg-warn/15 text-warn",
+    bad: "bg-bad/15 text-bad",
   };
   return (
     <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${styles[tone]}`}>
