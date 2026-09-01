@@ -83,11 +83,6 @@ export async function verifyBiometric(cardId, { frameSignature = null, forceMism
   return res.json();
 }
 
-export async function getScenario(scenarioId) {
-  const res = await fetch(`${API_BASE}/dispense/scenarios/${scenarioId}`);
-  if (!res.ok) return null;
-  return res.json();
-}
 
 export async function verifyDispense({ cardId, prescriptionText, identityVerified = true, intake = {}, scenario = null }) {
   const res = await fetch(`${API_BASE}/dispense/verify`, {

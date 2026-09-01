@@ -82,7 +82,7 @@ export default function KioskWizard({ onSessionResult }) {
     setResult(null);
     setError(null);
     pending.current = null;
-  }, []);
+  }, [voice]);
 
   // A kiosk nobody is standing at must return to the start on its own.
   useEffect(() => {
@@ -150,47 +150,78 @@ export default function KioskWizard({ onSessionResult }) {
    * was even read, so it invented a script and ran ahead of the screen. These read the
    * live state instead, and drive the same actions the buttons do.
    */
+  /** The single source of truth about what the patient is looking at. */
+  const describeScreen = useCallback(() => {
+    const s = live.current;
+    const identityStage = identityControls.current;
+    const group = s.groups?.[s.groupIndex];
+
+    const step =
+      s.phase === "welcome"
+        ? "uvod"
+        : s.phase === "identity"
+        ? identityStage?.stage === "face" || identityStage?.stage === "scanning"
+          ? "tvar"
+          : "karta"
+        : { questions: "otazka", review: "recept", result: "vysledok" }[s.phase] ?? s.phase;
+
+    const state = {
+      krok: step,
+      meno: s.identity?.patient?.name ?? identityStage?.patientName ?? null,
+    };
+    if (s.phase === "identity" && identityStage?.busy) {
+      state.cakaj = "Prebieha načítanie, počkaj a nepýtaj sa znova.";
+    }
+
+    if (step === "otazka" && group) {
+      state.otazka = group.questions[0]?.short ?? group.questions[0]?.prompt;
+      state.moznosti = group.questions.flatMap((q) => q.options.map((o) => o.label));
+    }
+    if (s.scenario) {
+      state.recept = (s.scenario.preview ?? []).map((i) => `${i.trade_name} — ${i.schedule}`);
+    }
+    if (s.result) {
+      state.vysledok = s.result.verdict_label;
+      state.rozpis = (s.result.dosing_plan ?? []).map(
+        (e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`
+      );
+      state.zistenia = (s.result.next_steps ?? [])
+        .flatMap((x) => x.script ?? [])
+        .filter((l) => l.patient_visible)
+        .map((l) => l.patient);
+    }
+    return JSON.stringify(state);
+  }, []);
+
   const clientTools = useMemo(
     () => ({
-      stav_obrazovky: async () => {
-        const s = live.current;
-        const group = s.groups?.[s.groupIndex];
-        const state = {
-          krok: {
-            welcome: "uvod",
-            identity: identityControls.current?.stage === "face" ? "tvar" : "karta",
-            questions: "otazka",
-            review: "recept",
-            result: "vysledok",
-          }[s.phase] ?? s.phase,
-          meno: s.identity?.patient?.name ?? null,
-        };
+      stav_obrazovky: async () => describeScreen(),
 
-        if (state.krok === "otazka" && group) {
-          state.otazka = group.questions[0]?.short ?? group.questions[0]?.prompt;
-          state.moznosti = group.questions.flatMap((q) => q.options.map((o) => o.label));
+
+      pokracuj: async () => {
+        const before = describeScreen();
+        const note = handlers.current.advance();
+        // Card read and face scan are asynchronous; answering before they finish is how
+        // the agent ends up narrating a step the patient has already passed.
+        // Card read plus face scan runs about 2.5 s; wait well past it rather than
+        // handing the agent a half-finished step.
+        for (let i = 0; i < 45; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          const now = describeScreen();
+          if (now !== before && !JSON.parse(now).cakaj) {
+            return `${note} Aktuálny stav: ${now}`;
+          }
         }
-        if (s.scenario) {
-          state.recept = (s.scenario.preview ?? []).map((i) => `${i.trade_name} — ${i.schedule}`);
-        }
-        if (s.result) {
-          state.vysledok = s.result.verdict_label;
-          state.rozpis = (s.result.dosing_plan ?? []).map(
-            (e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`
-          );
-          state.zistenia = (s.result.next_steps ?? [])
-            .flatMap((x) => x.script ?? [])
-            .filter((l) => l.patient_visible)
-            .map((l) => l.patient);
-        }
-        return JSON.stringify(state);
+        return `${note} Aktuálny stav: ${describeScreen()}`;
       },
 
-      pokracuj: async () => handlers.current.advance(),
-
-      zapis_odpoved: async ({ lieky }) => handlers.current.record(lieky),
+      zapis_odpoved: async ({ lieky }) => {
+        const note = handlers.current.record(lieky);
+        await new Promise((r) => setTimeout(r, 250));
+        return `${note} Aktuálny stav: ${describeScreen()}`;
+      },
     }),
-    []
+    [describeScreen]
   );
 
   // Rebuilt every render, so the tools always act on current state.
@@ -261,6 +292,15 @@ export default function KioskWizard({ onSessionResult }) {
       return msg + " Teraz je pacient na kroku recept.";
     },
   };
+
+  // Dev only: the agent drives the kiosk through these, and a browser pane cannot
+  // grant a microphone — so exposing them is the only way to exercise the voice path
+  // end to end instead of shipping it untested.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__kioskTools = clientTools;
+    return () => delete window.__kioskTools;
+  }, [clientTools]);
 
   const stepIndex = useMemo(
     () => ({ welcome: 0, identity: 1, questions: 2, review: 3, result: 4 }[phase] ?? 0),

@@ -54,13 +54,14 @@ export default function KioskOutcome({ data, onRestart }) {
 
   // ── Page 0: your medicines ────────────────────────────────────────────────
   if (page === 0) {
-    const nothingToSay = cards.length === 0;
+    // The take-away screen always follows, even with nothing to warn about — a clean
+    // result is exactly the patient who should still leave with their schedule.
     return (
       <Screen
         footer={
           <div className="space-y-4">
-            <BigButton onClick={nothingToSay ? onRestart : next} full>
-              {nothingToSay ? "Hotovo, ďakujem" : "Pokračovať"}
+            <BigButton onClick={next} full>
+              Pokračovať
             </BigButton>
             <Rail steps={pages} current={0} />
           </div>

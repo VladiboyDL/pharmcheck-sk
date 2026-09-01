@@ -61,10 +61,23 @@ export default function KioskIdentity({ onDone, controls }) {
     setStage("scanning");
     const result = await verifyBiometric(patient.card_id, { frameSignature: `k${Date.now()}` });
     const target = result.match_score ?? 0;
-    for (let i = 1; i <= 24; i++) {
-      await new Promise((r) => setTimeout(r, 50));
-      setScore(Number(((target * i) / 24).toFixed(1)));
-    }
+
+    // Progress comes from elapsed time, not from counting sleeps, so a slow or
+    // backgrounded kiosk still finishes in about a second instead of stretching to
+    // half a minute. setTimeout rather than requestAnimationFrame: rAF is suspended
+    // outright when the page is not visible, which would hang the scan forever.
+    const DURATION = 1200;
+    const started = performance.now();
+    await new Promise((resolve) => {
+      const tick = () => {
+        const progress = Math.min(1, (performance.now() - started) / DURATION);
+        setScore(Number((target * progress).toFixed(1)));
+        if (progress < 1) setTimeout(tick, 40);
+        else resolve();
+      };
+      tick();
+    });
+
     streamRef.current?.getTracks().forEach((t) => t.stop());
     onDone({ patient, biometric: result });
   }
@@ -77,12 +90,16 @@ export default function KioskIdentity({ onDone, controls }) {
     if (!controls) return;
     controls.current = {
       stage,
+      // "reading" and "scanning" are the waits in between. Reporting them as the step
+      // before makes the agent re-ask for something the patient already did.
+      busy: stage === "reading" || stage === "scanning",
+      patientName: patient?.name ?? null,
       next: () => {
         if (stage === "card" && card) scanCard(card.card_id);
         else if (stage === "face") scanFace();
       },
     };
-  }, [controls, stage, card]);
+  }, [controls, stage, card, patient]);
 
   // ── Card under the camera ──────────────────────────────────────────────────
   if (stage === "card" || stage === "reading") {

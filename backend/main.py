@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import init_db
-from .routers import drugs, interactions, pharmacist, identity, dispense, voice
+from .routers import drugs, interactions, identity, dispense, voice
 
 app = FastAPI(title="PharmCheck SK", version="0.1.0")
 
@@ -14,7 +14,6 @@ app.add_middleware(
 
 app.include_router(drugs.router)
 app.include_router(interactions.router)
-app.include_router(pharmacist.router)
 app.include_router(identity.router)
 app.include_router(dispense.router)
 app.include_router(voice.router)
