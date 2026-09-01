@@ -6,7 +6,6 @@ import DrugDetailModal from "./components/DrugDetailModal";
 import ATCBrowser from "./components/ATCBrowser";
 import PatientProfiles from "./components/PatientProfiles";
 import StatsPanel from "./components/StatsPanel";
-import PharmacistChat from "./components/PharmacistChat";
 import DispensingWindow from "./components/DispensingWindow";
 import KioskWizard from "./components/KioskWizard";
 import ImpactDashboard from "./components/ImpactDashboard";
@@ -15,7 +14,6 @@ import { checkInteractions, getStats } from "./api/client";
 const TABS = [
   { id: "kiosk", label: "Kiosk (pacient)", icon: "kiosk" },
   { id: "dispense", label: "Konzola (lekárnik)", icon: "counter" },
-  { id: "pharmacist", label: "AI Lekárnik", icon: "chat" },
   { id: "checker", label: "Kontrola interakcií", icon: "shield" },
   { id: "atc", label: "ATC klasifikácia", icon: "grid" },
   { id: "profiles", label: "Profily pacientov", icon: "users" },
@@ -185,8 +183,6 @@ export default function App() {
         )}
 
         {activeTab === "impact" && <ImpactDashboard sessionResults={sessionResults} />}
-
-        {activeTab === "pharmacist" && <PharmacistChat />}
 
         {activeTab === "checker" && (
           <CheckerTab

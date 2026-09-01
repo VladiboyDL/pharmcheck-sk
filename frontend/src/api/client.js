@@ -50,19 +50,6 @@ export async function browseATC(code = "") {
   return res.json();
 }
 
-export async function pharmacistChat(message, history = [], contextDrugs = []) {
-  const res = await fetch(`${API_BASE}/pharmacist/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      history,
-      context_drugs: contextDrugs,
-    }),
-  });
-  if (!res.ok) throw new Error("Pharmacist chat failed");
-  return res.json();
-}
 
 // ── Dispensing window ──────────────────────────────────────────────────────────
 
@@ -178,5 +165,26 @@ export async function notifyPrescriber({ auditId, prescriber, patient, subject, 
     body: JSON.stringify({ audit_id: auditId, prescriber, patient, subject, detail }),
   });
   if (!res.ok) throw new Error("Odoslanie zlyhalo");
+  return res.json();
+}
+
+export async function getVoiceConfig() {
+  const res = await fetch(`${API_BASE}/voice/config`);
+  if (!res.ok) throw new Error("Voice config unavailable");
+  return res.json();
+}
+
+export async function openVoiceSession({ patientName, medicines, schedule, findings } = {}) {
+  const res = await fetch(`${API_BASE}/voice/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      patient_name: patientName,
+      medicines,
+      schedule,
+      findings,
+    }),
+  });
+  if (!res.ok) throw new Error("Voice session failed");
   return res.json();
 }
