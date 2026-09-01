@@ -290,6 +290,10 @@ function NextSteps({ steps }) {
 /** What to say at the window: the question first, then the professional action. */
 function CounsellingScript({ lines }) {
   const [open, setOpen] = useState(true);
+  const [all, setAll] = useState(false);
+  // A pharmacist has about half a minute. Lead with the five that matter.
+  const TOP = 5;
+  const shown = all ? lines : lines.slice(0, TOP);
   return (
     <div className="mt-3">
       <button
@@ -300,7 +304,7 @@ function CounsellingScript({ lines }) {
       </button>
       {open && (
         <ol className="mt-2.5 space-y-2.5">
-          {lines.map((l, n) => (
+          {shown.map((l, n) => (
             <li key={n} className="rounded-lg bg-slate-950/70 border border-slate-800 p-3">
               <p className="text-[10px] uppercase tracking-wider text-slate-500">{l.topic}</p>
               <p className="mt-1.5 text-sm text-slate-100">„{l.ask}“</p>
@@ -319,6 +323,16 @@ function CounsellingScript({ lines }) {
             </li>
           ))}
         </ol>
+      )}
+      {open && lines.length > TOP && (
+        <button
+          onClick={() => setAll((a) => !a)}
+          className="mt-2.5 text-[11px] text-cyan-400 hover:text-cyan-300"
+        >
+          {all
+            ? "Zobraziť len najdôležitejších 5"
+            : `Zobraziť všetkých ${lines.length} — zoradené podľa významnosti`}
+        </button>
       )}
     </div>
   );

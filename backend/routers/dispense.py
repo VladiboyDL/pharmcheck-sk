@@ -346,6 +346,10 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
             }
         )
 
+    # Twenty-one things to say is nothing said. Rank by clinical weight so the top of
+    # the list is what actually gets spoken at the window.
+    weight = {"Závažná": 0, "Upozornenie": 1, "Stredná": 2}
+    script.sort(key=lambda line: weight.get(line.get("severity"), 3))
     return script
 
 
