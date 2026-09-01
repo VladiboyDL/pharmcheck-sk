@@ -43,6 +43,48 @@ Závažnosť interakcie ti je zadaná — rešpektuj ju a prispôsob jej tón od
 Píš po slovensky, odborne ale zrozumiteľne. Bez markdown formátovania."""
 
 
+def demo_plan(conn: sqlite3.Connection):
+    """Exactly the pairs the six demo scenarios surface — a ~1 minute, ~$0.10 run.
+
+    Guarantees the scripted demo never shows a bare severity, even when there is no
+    time for the full backfill.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from backend.prescription import resolve
+    from backend.routers.dispense import DEMO_PRESCRIPTIONS
+
+    conn.row_factory = sqlite3.Row
+    wanted: set[int] = set()
+
+    for scenario in DEMO_PRESCRIPTIONS.values():
+        items, _ = resolve(conn, scenario["text"])
+        for a in items:
+            for b in items:
+                if a["id"] >= b["id"]:
+                    continue
+                for sa in (x.strip().lower() for x in a["active_substance"].split(",")):
+                    for sb in (x.strip().lower() for x in b["active_substance"].split(",")):
+                        if sa == sb:
+                            continue
+                        row = conn.execute(
+                            """SELECT id FROM interactions
+                               WHERE ((LOWER(drug_a)=? AND LOWER(drug_b)=?)
+                                   OR (LOWER(drug_a)=? AND LOWER(drug_b)=?))
+                                 AND (mechanism IS NULL OR mechanism='')""",
+                            (sa, sb, sb, sa),
+                        ).fetchone()
+                        if row:
+                            wanted.add(row["id"])
+
+    if not wanted:
+        return []
+    placeholders = ",".join("?" * len(wanted))
+    return conn.execute(
+        f"SELECT id, drug_a, drug_b, severity FROM interactions WHERE id IN ({placeholders})",
+        list(wanted),
+    ).fetchall()
+
+
 def build_plan(conn: sqlite3.Connection, major_top: int, moderate_top: int, limit: int | None):
     conn.execute(
         """CREATE TEMP TABLE sk_subs AS
@@ -118,6 +160,8 @@ def main() -> int:
     ap.add_argument("--moderate-top", type=int, default=150, help="rank cutoff for Stredná pairs")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--demo", action="store_true",
+                    help="only the pairs the six demo scenarios surface (~1 min)")
     args = ap.parse_args()
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -129,12 +173,20 @@ def main() -> int:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
 
-    plan = build_plan(conn, args.major_top, args.moderate_top, args.limit)
+    if args.demo:
+        plan = demo_plan(conn)
+        print("Režim: iba páry zo šiestich demo scenárov")
+    else:
+        plan = build_plan(conn, args.major_top, args.moderate_top, args.limit)
     majors = sum(1 for r in plan if r["severity"] == "Závažná")
     print(f"Na spracovanie: {len(plan)} párov  ({majors} závažných, {len(plan) - majors} stredných)")
     print(f"Odhad: ~{len(plan) * 0.45 / 1000:.1f}k requestov · približne ${len(plan) * 0.0013:.2f}")
 
-    if args.dry_run or not plan:
+    if not plan:
+        print("Všetky cieľové páry už majú vysvetlenie — netreba nič robiť.")
+        return 0
+
+    if args.dry_run:
         for r in plan[:15]:
             print(f"  {r['severity']:9s} {r['drug_a']} + {r['drug_b']}")
         return 0
