@@ -100,3 +100,36 @@ class DatabaseStats(BaseModel):
     drugs_with_interactions: int
     severity_breakdown: dict
     top_atc_groups: List[ATCGroup]
+
+
+# ── Pharmacist chat models ──
+
+class PharmacistDrug(BaseModel):
+    id: int
+    trade_name: str
+    active_substance: str
+
+
+class PharmacistInteraction(BaseModel):
+    drug_a: str
+    drug_b: str
+    severity: str
+    mechanism: str = ""
+    management: str = ""
+
+
+class PharmacistMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class PharmacistChatRequest(BaseModel):
+    message: str
+    history: Optional[List[PharmacistMessage]] = None
+    context_drugs: Optional[List[PharmacistDrug]] = None
+
+
+class PharmacistChatResponse(BaseModel):
+    message: str
+    identified_drugs: List[PharmacistDrug] = []
+    interactions: List[PharmacistInteraction] = []

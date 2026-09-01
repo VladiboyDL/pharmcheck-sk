@@ -6,16 +6,26 @@ import DrugDetailModal from "./components/DrugDetailModal";
 import ATCBrowser from "./components/ATCBrowser";
 import PatientProfiles from "./components/PatientProfiles";
 import StatsPanel from "./components/StatsPanel";
+import PharmacistChat from "./components/PharmacistChat";
+import DispensingWindow from "./components/DispensingWindow";
+import ImpactDashboard from "./components/ImpactDashboard";
 import { checkInteractions, getStats } from "./api/client";
 
 const TABS = [
+  { id: "dispense", label: "Výdajové okno", icon: "counter" },
+  { id: "pharmacist", label: "AI Lekárnik", icon: "chat" },
   { id: "checker", label: "Kontrola interakcií", icon: "shield" },
   { id: "atc", label: "ATC klasifikácia", icon: "grid" },
   { id: "profiles", label: "Profily pacientov", icon: "users" },
+  { id: "impact", label: "Dopad", icon: "chart" },
 ];
 
+// Tabs rendered as an operator console rather than a light web page.
+const DARK_TABS = new Set(["dispense", "impact"]);
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState("checker");
+  const [activeTab, setActiveTab] = useState("dispense");
+  const [sessionResults, setSessionResults] = useState([]);
   const [medications, setMedications] = useState([]);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -81,10 +91,16 @@ export default function App() {
     setActiveTab("checker");
   }
 
+  const dark = DARK_TABS.has(activeTab);
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`min-h-screen transition-colors ${dark ? "bg-slate-950" : "bg-slate-50"}`}>
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+      <header
+        className={`sticky top-0 z-40 border-b transition-colors ${
+          dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+        }`}
+      >
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -94,8 +110,12 @@ export default function App() {
                 </svg>
               </div>
               <div>
-                <h1 className="text-lg font-bold text-slate-900 leading-tight">PharmCheck SK</h1>
-                <p className="text-[11px] text-slate-400 leading-tight">Kontrola liekových interakcií</p>
+                <h1 className={`text-lg font-bold leading-tight ${dark ? "text-slate-50" : "text-slate-900"}`}>
+                  AvatarAI <span className="font-normal text-slate-400">Dispense</span>
+                </h1>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Klinická inteligencia pre výdajné okno
+                </p>
               </div>
             </div>
 
@@ -114,8 +134,14 @@ export default function App() {
             )}
 
             <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold border border-blue-100">
-                v2.0
+              <span
+                className={`text-[10px] px-2.5 py-1 rounded-full font-semibold border ${
+                  dark
+                    ? "bg-slate-800 text-slate-300 border-slate-700"
+                    : "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-blue-100"
+                }`}
+              >
+                Demo · pilot Dr.Max
               </span>
             </div>
           </div>
@@ -128,7 +154,11 @@ export default function App() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
+                    ? dark
+                      ? "border-cyan-400 text-cyan-300"
+                      : "border-blue-600 text-blue-600"
+                    : dark
+                    ? "border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-700"
                     : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
                 }`}
               >
@@ -142,6 +172,16 @@ export default function App() {
 
       {/* Main content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {activeTab === "dispense" && (
+          <DispensingWindow
+            onSessionResult={(r) => setSessionResults((prev) => [...prev, r])}
+          />
+        )}
+
+        {activeTab === "impact" && <ImpactDashboard sessionResults={sessionResults} />}
+
+        {activeTab === "pharmacist" && <PharmacistChat />}
+
         {activeTab === "checker" && (
           <CheckerTab
             medications={medications}
@@ -188,14 +228,14 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 mt-16 bg-white">
+      <footer className={`border-t mt-16 ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              PharmCheck SK v2.0 &mdash; Proof of Concept pre slovenský lekárenský trh
+              AvatarAI Dispense &mdash; funkčný prototyp pre slovenský lekárenský trh
             </p>
             <div className="flex items-center gap-4 text-xs text-slate-400">
-              <span>Dáta: DDInter 2.0 + ŠÚKL CZ</span>
+              <span>Dáta: DDInter 2.0 + register ŠÚKL</span>
               <span className="text-slate-300">|</span>
               <span className="text-amber-500 font-medium">Nie je určený na klinické rozhodovanie</span>
             </div>
@@ -368,6 +408,27 @@ function DemoScenarios({ onLoad }) {
 }
 
 function TabIcon({ icon }) {
+  if (icon === "counter") {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M4 21V10h16v11M8 10V6a4 4 0 118 0v4M9 15h6" />
+      </svg>
+    );
+  }
+  if (icon === "chart") {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 20h18M7 20v-7m5 7V7m5 13v-10" />
+      </svg>
+    );
+  }
+  if (icon === "chat") {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    );
+  }
   if (icon === "shield") {
     return (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

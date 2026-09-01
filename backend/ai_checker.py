@@ -8,6 +8,24 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _load_dotenv() -> None:
+    """Read KEY=VALUE lines from .env so the key can live in a file, not the shell."""
+    from pathlib import Path
+
+    for candidate in (Path(__file__).parent / ".env", Path(__file__).parent.parent / ".env"):
+        if not candidate.is_file():
+            continue
+        for line in candidate.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+
+
+_load_dotenv()
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # Rate limiting: max 30 AI calls per minute to control costs
@@ -156,3 +174,88 @@ def check_interactions_batch(pairs: list[tuple[str, str]], db=None) -> dict:
             key = (sa.lower().strip(), sb.lower().strip())
             results[key] = result
     return results
+
+
+# ── Runtime explanation backfill ───────────────────────────────────────────────
+# DDInter supplies a severity for every pair but clinical text for only a fraction.
+# When a pair surfaces at the counter with no explanation, generate one on the spot
+# and write it back, so the same pair is instant for every later dispense.
+
+EXPLAIN_SYSTEM = """Si klinický farmakológ. Pre dvojicu účinných látok napíš stručné, prakticky
+použiteľné vysvetlenie liekovej interakcie pre lekárnika za výdajným pultom.
+
+Odpovedaj VÝHRADNE vo formáte JSON, bez iného textu:
+{
+  "mechanism": "Mechanizmus interakcie po slovensky, 1-2 vety. Konkrétne (CYP izoenzýmy, P-gp, farmakodynamika).",
+  "management": "Čo má lekárnik urobiť. 1-2 vety. Konkrétne: čo monitorovať, ako upraviť dávku, kedy volať lekárovi.",
+  "alternatives": "Bezpečnejšia alternatíva ak existuje, 1 veta. Inak čo monitorovať namiesto zámeny."
+}
+
+Závažnosť ti je zadaná — rešpektuj ju a prispôsob jej tón odporúčania.
+Píš po slovensky, odborne ale zrozumiteľne. Bez markdown formátovania."""
+
+
+def explain_interaction_ai(substance_a: str, substance_b: str, severity: str, db=None) -> Optional[dict]:
+    """Generate the missing clinical text for a pair whose severity is already known.
+
+    Returns {"mechanism", "management", "alternatives"} or None. Persists to the
+    interactions row so the next lookup is free.
+    """
+    if not ANTHROPIC_API_KEY:
+        return None
+    if not _rate_limit_ok():
+        logger.warning("AI rate limit reached, skipping explanation")
+        return None
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        _call_timestamps.append(time.time())
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            system=EXPLAIN_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": f"Účinné látky: {substance_a} + {substance_b}\nZávažnosť interakcie: {severity}",
+            }],
+        )
+
+        text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        data = json.loads(text)
+
+        result = {
+            "mechanism": (data.get("mechanism") or "").strip(),
+            "management": (data.get("management") or "").strip(),
+            "alternatives": (data.get("alternatives") or "").strip(),
+        }
+        if not result["mechanism"]:
+            return None
+
+        if db is not None:
+            try:
+                sa, sb = substance_a.lower().strip(), substance_b.lower().strip()
+                db.execute(
+                    """UPDATE interactions
+                       SET mechanism=?, management=?, alternatives=?
+                       WHERE ((LOWER(drug_a)=? AND LOWER(drug_b)=?)
+                           OR (LOWER(drug_a)=? AND LOWER(drug_b)=?))
+                         AND (mechanism IS NULL OR mechanism='')""",
+                    (result["mechanism"], result["management"], result["alternatives"], sa, sb, sb, sa),
+                )
+                db.commit()
+            except Exception:
+                pass  # persistence failure must not break the response
+
+        return result
+
+    except json.JSONDecodeError:
+        logger.warning(f"AI returned invalid JSON explaining {substance_a} <-> {substance_b}")
+        return None
+    except Exception as e:
+        logger.warning(f"AI explanation failed for {substance_a} <-> {substance_b}: {e}")
+        return None

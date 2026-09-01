@@ -1,25 +1,34 @@
+# AvatarAI Dispense — demo deployment (Frankfurt, closest region to SK).
+#
+# The SQLite database ships inside the repo, so the API needs no attached disk.
+# Note: the dispensing audit log is written to that same file and is therefore reset
+# on redeploy — fine for a demo, replaced by Postgres for a pilot.
+
 services:
   - type: web
-    name: pharmcheck-api
+    name: avatarai-dispense-api
     runtime: python
     region: frankfurt
     plan: starter
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
+      # Enables the AI pharmacist and the live interaction-explanation backfill.
+      # Set the value manually in the Render dashboard — never commit it.
       - key: ANTHROPIC_API_KEY
-        sync: false  # Set manually in Render dashboard
+        sync: false
 
   - type: web
-    name: pharmcheck-dashboard
+    name: avatarai-dispense
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://pharmcheck-api.onrender.com/api
+        value: https://avatarai-dispense-api.onrender.com/api
     routes:
       - type: rewrite
         source: /*
@@ -28,3 +37,8 @@ services:
       - path: /*
         name: Cache-Control
         value: no-cache
+      # getUserMedia for the identity check requires a secure context; Render serves
+      # HTTPS by default, so the camera works on the deployed URL.
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self)
