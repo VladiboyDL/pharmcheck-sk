@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import IdentityGate from "./IdentityGate";
+import IntakeInterview from "./IntakeInterview";
 import DispenseResult from "./DispenseResult";
 import { getScenario, verifyDispense } from "../api/client";
 
@@ -11,6 +12,7 @@ export default function DispensingWindow({ onSessionResult }) {
   const [identity, setIdentity] = useState(null);
   const [scenario, setScenario] = useState(null);
   const [text, setText] = useState("");
+  const [intakeAnswers, setIntakeAnswers] = useState({});
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -35,6 +37,7 @@ export default function DispensingWindow({ onSessionResult }) {
         cardId: identity.patient.card_id,
         prescriptionText: text,
         identityVerified: identityOk,
+        intake: intakeAnswers,
       });
       setResult(data);
       onSessionResult?.(data);
@@ -49,6 +52,7 @@ export default function DispensingWindow({ onSessionResult }) {
     setIdentity(null);
     setScenario(null);
     setText("");
+    setIntakeAnswers({});
     setResult(null);
     setError(null);
   }
@@ -101,40 +105,49 @@ export default function DispensingWindow({ onSessionResult }) {
             className="w-full rounded-lg bg-slate-900 border border-slate-800 focus:border-cyan-700 focus:outline-none text-slate-200 font-mono text-xs leading-relaxed p-3.5 resize-y"
           />
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] text-slate-600">
-              Podporované zápisy dávkovania: <code className="text-slate-500">1-0-1</code>,{" "}
-              <code className="text-slate-500">2x denne</code>, <code className="text-slate-500">1/2-0-0</code>
-            </p>
-            <button
-              onClick={handleVerify}
-              disabled={loading || !text.trim() || !identity}
-              className="rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-semibold text-sm px-6 py-2.5 transition-colors flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                  Kontrolujem…
-                </>
-              ) : (
-                <>Spustiť kontrolu výdaja</>
-              )}
-            </button>
-          </div>
-
-          {!identityOk && identity && (
-            <p className="mt-3 text-[11px] text-red-400">
-              Totožnosť nebola potvrdená — kontrola prebehne, ale výdaj bude zablokovaný.
-            </p>
-          )}
-
-          {error && (
-            <div className="mt-3 rounded-lg border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300">
-              {error}
-            </div>
-          )}
+          <p className="mt-3 text-[11px] text-slate-600">
+            Podporované zápisy dávkovania: <code className="text-slate-500">1-0-1</code>,{" "}
+            <code className="text-slate-500">2x denne</code>, <code className="text-slate-500">1/2-0-0</code>
+          </p>
         </div>
       </div>
+
+      <IntakeInterview
+        cardId={identity?.patient?.card_id}
+        value={intakeAnswers}
+        onChange={setIntakeAnswers}
+        disabled={!identity}
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[11px] text-slate-500">
+          {!identityOk && identity && (
+            <span className="text-red-400">
+              Totožnosť nebola potvrdená — kontrola prebehne, ale výdaj bude zablokovaný.
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleVerify}
+          disabled={loading || !text.trim() || !identity}
+          className="rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-semibold text-sm px-7 py-3 transition-colors flex items-center gap-2"
+        >
+          {loading ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+              Kontrolujem…
+            </>
+          ) : (
+            <>Spustiť kontrolu výdaja</>
+          )}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

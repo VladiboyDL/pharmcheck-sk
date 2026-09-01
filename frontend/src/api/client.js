@@ -97,7 +97,7 @@ export async function getScenario(cardId) {
   return res.json();
 }
 
-export async function verifyDispense({ cardId, prescriptionText, identityVerified = true }) {
+export async function verifyDispense({ cardId, prescriptionText, identityVerified = true, intake = {} }) {
   const res = await fetch(`${API_BASE}/dispense/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -105,6 +105,7 @@ export async function verifyDispense({ cardId, prescriptionText, identityVerifie
       card_id: cardId,
       prescription_text: prescriptionText,
       identity_verified: identityVerified,
+      intake,
     }),
   });
   if (!res.ok) {
@@ -130,5 +131,12 @@ export async function explainInteraction({ substanceA, substanceB, severity }) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Vysvetlenie sa nepodarilo načítať");
   }
+  return res.json();
+}
+
+export async function getIntakeQuestions(cardId) {
+  const params = cardId ? `?card_id=${encodeURIComponent(cardId)}` : "";
+  const res = await fetch(`${API_BASE}/dispense/intake${params}`);
+  if (!res.ok) throw new Error("Nepodarilo sa načítať otázky");
   return res.json();
 }

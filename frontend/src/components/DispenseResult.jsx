@@ -2,6 +2,12 @@ import { useState } from "react";
 import { explainInteraction } from "../api/client";
 
 const VERDICT_STYLES = {
+  PARTIAL: {
+    ring: "border-amber-700 bg-amber-950/40",
+    chip: "bg-amber-400 text-amber-950",
+    text: "text-amber-200",
+    icon: "M9 12h6m-3-3v6M12 3a9 9 0 100 18 9 9 0 000-18z",
+  },
   DISPENSE: {
     ring: "border-emerald-700 bg-emerald-950/50",
     chip: "bg-emerald-500 text-emerald-950",
@@ -83,7 +89,10 @@ export default function DispenseResult({ data, onReset }) {
           <Stat value={s.checks_run} label="kontrol vykonaných" />
           <Stat value={`${s.duration_ms} ms`} label="čas vyhodnotenia" />
           <Stat value={s.pairs_checked} label="liekových párov" />
-          <Stat value={s.items} label="položiek receptu" />
+          <Stat
+            value={s.dispensable != null ? `${s.dispensable}/${s.items}` : s.items}
+            label="položiek na výdaj"
+          />
         </div>
 
         <p className="mt-3 text-[11px] text-slate-500">
@@ -92,6 +101,9 @@ export default function DispenseResult({ data, onReset }) {
           bežnom objeme 200 receptov denne sa nerobí vôbec.
         </p>
       </div>
+
+      {/* ── What happens now ────────────────────────────────────────────────── */}
+      {data.next_steps?.length > 0 && <NextSteps steps={data.next_steps} />}
 
       {/* ── Critical findings ───────────────────────────────────────────────── */}
       {critical.length > 0 && <FindingGroup title="Kritické zistenia" findings={critical} open />}
@@ -120,16 +132,21 @@ export default function DispenseResult({ data, onReset }) {
                 <th className="pb-2 font-medium text-right">Sila</th>
                 <th className="pb-2 font-medium text-right">Denne</th>
                 <th className="pb-2 font-medium text-right">Denná dávka</th>
-                <th className="pb-2 font-medium text-center">Stav</th>
+                <th className="pb-2 font-medium text-right">Rozhodnutie</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70">
               {data.items.map((it) => {
-                const worst = worstSeverity(it.findings);
+                const fromInterview = it.source === "interview";
                 return (
-                  <tr key={it.id} className="align-top">
+                  <tr key={it.key} className="align-top">
                     <td className="py-2 pr-3">
                       <span className="text-slate-200 font-medium">{it.trade_name}</span>
+                      {fromInterview && (
+                        <span className="ml-1.5 text-[9px] uppercase tracking-wide text-cyan-400/80 border border-cyan-900 rounded px-1 py-px">
+                          z rozhovoru
+                        </span>
+                      )}
                       <span className="block text-[10px] text-slate-600 font-mono mt-0.5">{it.raw_line}</span>
                     </td>
                     <td className="py-2 pr-3 text-slate-400">{it.active_substance}</td>
@@ -142,12 +159,8 @@ export default function DispenseResult({ data, onReset }) {
                     <td className="py-2 pr-3 text-right tabular-nums font-medium text-slate-200">
                       {it.daily_dose_mg != null ? `${fmt(it.daily_dose_mg)} mg` : "—"}
                     </td>
-                    <td className="py-2 text-center">
-                      {worst ? (
-                        <span className={`inline-block w-2 h-2 rounded-full ${SEV[worst].dot}`} title={SEV[worst].label} />
-                      ) : (
-                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" title="Bez nálezu" />
-                      )}
+                    <td className="py-2 text-right">
+                      <ItemStatus status={it.status} reasons={it.status_reasons} />
                     </td>
                   </tr>
                 );
@@ -173,6 +186,31 @@ export default function DispenseResult({ data, onReset }) {
         </Panel>
       )}
 
+      {data.unverified_pairs?.length > 0 && (
+        <Panel
+          title={`Neoverené dvojice (${data.unverified_pairs.length})`}
+          subtitle="systém nevie potvrdiť ani vylúčiť interakciu"
+          tone="amber"
+        >
+          <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+            Tieto látky nie sú v interakčnej databáze. Absencia záznamu neznamená, že
+            kombinácia je bezpečná — znamená, že o nej nemáme dáta.
+          </p>
+          <div className="space-y-1.5">
+            {data.unverified_pairs.map((u, n) => (
+              <div key={n} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs">
+                <span className="text-slate-200">
+                  {u.drug_a} <span className="text-slate-500">+</span> {u.drug_b}
+                </span>
+                <span className="block text-[10px] text-amber-400/80 mt-0.5">
+                  mimo databázy: {u.unknown.join(", ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
       {infos.length > 0 && <FindingGroup title="Informatívne zistenia" findings={infos} />}
 
       {/* ── Audit ───────────────────────────────────────────────────────────── */}
@@ -189,6 +227,107 @@ export default function DispenseResult({ data, onReset }) {
           <span className="text-slate-500">{data.audit.operator}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+const STEP_STYLE = {
+  dispense: { box: "border-emerald-800 bg-emerald-950/30", text: "text-emerald-200", icon: "M5 13l4 4L19 7" },
+  advise: { box: "border-emerald-800 bg-emerald-950/30", text: "text-emerald-200", icon: "M5 13l4 4L19 7" },
+  swap: { box: "border-amber-800 bg-amber-950/30", text: "text-amber-200", icon: "M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" },
+  contact: { box: "border-red-800 bg-red-950/30", text: "text-red-200", icon: "M3 5a2 2 0 012-2h3l2 5-2.5 1.5a11 11 0 005 5L14 12l5 2v3a2 2 0 01-2 2A14 14 0 013 5z" },
+};
+
+/** The part a verdict alone never answers: what the patient does now. */
+function NextSteps({ steps }) {
+  return (
+    <section className="rounded-2xl border border-slate-700 bg-slate-900/70">
+      <div className="px-5 py-3.5 border-b border-slate-800">
+        <h3 className="text-sm font-semibold text-slate-100">Čo robiť teraz</h3>
+        <p className="text-[11px] text-slate-500 mt-0.5">
+          Konkrétne kroky pri pulte — pacient neodchádza s prázdnymi rukami a bez plánu
+        </p>
+      </div>
+      <div className="p-5 space-y-3">
+        {steps.map((step, n) => {
+          const st = STEP_STYLE[step.kind] ?? STEP_STYLE.swap;
+          return (
+            <div key={n} className={`rounded-xl border p-4 ${st.box}`}>
+              <div className="flex items-start gap-3">
+                <svg className={`w-4 h-4 mt-0.5 flex-shrink-0 ${st.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d={st.icon} />
+                </svg>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold ${st.text}`}>{step.title}</p>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">{step.detail}</p>
+                  {step.message && <PrescriberMessage text={step.message} />}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PrescriberMessage({ text }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-[11px] text-slate-300 underline underline-offset-2 hover:text-slate-100"
+        >
+          {open ? "Skryť text pre lekára" : "Zobraziť pripravený text pre lekára"}
+        </button>
+        {open && (
+          <button onClick={copy} className="text-[11px] text-cyan-400 hover:text-cyan-300">
+            {copied ? "skopírované" : "kopírovať"}
+          </button>
+        )}
+      </div>
+      {open && (
+        <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-950 border border-slate-800 p-3 text-[11px] text-slate-300 leading-relaxed font-sans">
+          {text}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+const ITEM_STATUS = {
+  ok: { label: "Vydať", cls: "bg-emerald-500/15 text-emerald-300" },
+  review: { label: "Vydať s poučením", cls: "bg-amber-500/15 text-amber-300" },
+  hold: { label: "Zadržať", cls: "bg-red-500/15 text-red-300" },
+};
+
+function ItemStatus({ status, reasons }) {
+  const st = ITEM_STATUS[status] ?? ITEM_STATUS.ok;
+  return (
+    <div className="inline-block text-right">
+      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${st.cls}`}>
+        {st.label}
+      </span>
+      {reasons?.length > 0 && (
+        <span className="block text-[10px] text-slate-500 mt-1 max-w-[15rem] text-right">
+          {reasons[0]}
+          {reasons.length > 1 && ` +${reasons.length - 1}`}
+        </span>
+      )}
     </div>
   );
 }
@@ -353,13 +492,6 @@ function Stat({ value, label }) {
       <p className="text-[10px] text-slate-500 mt-1">{label}</p>
     </div>
   );
-}
-
-function worstSeverity(findings) {
-  if (findings.some((f) => f.severity === "critical")) return "critical";
-  if (findings.some((f) => f.severity === "warning")) return "warning";
-  if (findings.some((f) => f.severity === "info")) return "info";
-  return null;
 }
 
 function fmt(n) {

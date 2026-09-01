@@ -57,6 +57,7 @@ def demo_plan(conn: sqlite3.Connection):
     time for the full backfill.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from backend import substances
     from backend.prescription import resolve
     from backend.routers.dispense import DEMO_PRESCRIPTIONS
 
@@ -69,8 +70,17 @@ def demo_plan(conn: sqlite3.Connection):
             for b in items:
                 if a["id"] >= b["id"]:
                     continue
-                for sa in (x.strip().lower() for x in a["active_substance"].split(",")):
-                    for sb in (x.strip().lower() for x in b["active_substance"].split(",")):
+                # Registry names carry salts; the interaction data does not. Resolve
+                # both sides the way the dispense path does, or we miss the pair here
+                # and it shows up unexplained in the demo.
+                names_a = [
+                    n for n, _ in (substances.resolve(conn, c) for c in substances.split_components(a["active_substance"])) if n
+                ]
+                names_b = [
+                    n for n, _ in (substances.resolve(conn, c) for c in substances.split_components(b["active_substance"])) if n
+                ]
+                for sa in names_a:
+                    for sb in names_b:
                         if sa == sb:
                             continue
                         row = conn.execute(
