@@ -10,7 +10,7 @@ import { Screen, Title, BigButton } from "./KioskShell";
  * number and insurer code off the front. Starting the camera here also gets the
  * permission prompt out of the way before it can interrupt the face step.
  */
-export default function KioskIdentity({ onDone }) {
+export default function KioskIdentity({ onDone, controls }) {
   const [cards, setCards] = useState([]);
   const [stage, setStage] = useState("card"); // card | reading | face | scanning
   const [patient, setPatient] = useState(null);
@@ -70,6 +70,19 @@ export default function KioskIdentity({ onDone }) {
   }
 
   const card = cards[0];
+
+  // The voice agent advances the same actions the buttons do — one code path, so the
+  // two modes can never drift apart.
+  useEffect(() => {
+    if (!controls) return;
+    controls.current = {
+      stage,
+      next: () => {
+        if (stage === "card" && card) scanCard(card.card_id);
+        else if (stage === "face") scanFace();
+      },
+    };
+  }, [controls, stage, card]);
 
   // ── Card under the camera ──────────────────────────────────────────────────
   if (stage === "card" || stage === "reading") {

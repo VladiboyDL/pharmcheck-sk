@@ -27,10 +27,18 @@ export default function KioskWizard({ onSessionResult }) {
   const [scenarioId, setScenarioId] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [mode, setMode] = useState(null); // null | "voice" | "tap"
   const pending = useRef(null);
+  const identityControls = useRef(null);
   const voice = useVoiceAgent();
 
+  // The agent's tools are registered once at connect time but must see current
+  // state, so everything they read goes through this ref.
+  const live = useRef({});
+
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
+
+  live.current = { phase, identity, groups, groupIndex, answers, scenario, result };
 
   useEffect(() => {
     getScenarios()
@@ -60,6 +68,7 @@ export default function KioskWizard({ onSessionResult }) {
 
   const restart = useCallback(() => {
     voice.stop();
+    setMode(null);
     setPhase("welcome");
     setIdentity(null);
     setGroups([]);
@@ -88,6 +97,12 @@ export default function KioskWizard({ onSessionResult }) {
   }, [phase, restart]);
 
   /** Fire the check now; the prescription screen covers its latency. */
+  function startVoice() {
+    setMode("voice");
+    setPhase("identity");
+    voice.start({ clientTools });
+  }
+
   function startCheck(finalAnswers) {
     setError(null);
     const request = verifyDispense({
@@ -123,35 +138,94 @@ export default function KioskWizard({ onSessionResult }) {
     setPhase("review");
   }
 
-  // Voice needs a user gesture to get the microphone, so it starts on "Začať" and
-  // then follows the patient through the flow.
+  // Voice mode is announced once; from then on the agent reads the screen through
+  // stav_obrazovky rather than being pushed narration it might get ahead of.
   useEffect(() => {
-    if (!voice.available || voice.status !== "live") return;
-    const lines = {
-      identity: "Pacient prikladá kartu poistenca pod čítačku.",
-      questions: "Pýtam sa, či okrem receptu užíva ešte niečo.",
-      review: "Ukazujem mu recept od lekára.",
-    };
-    if (lines[phase]) voice.say(lines[phase]);
-  }, [phase, voice.available, voice.status]);
+    if (mode !== "voice" || voice.status !== "live") return;
+    voice.say(`Pacient je na kroku ${phase}.`);
+  }, [phase, mode, voice.status]);
 
-  // Once the check is done the agent can talk about the actual medicines.
-  useEffect(() => {
-    if (!result || voice.status !== "live") return;
-    const plan = (result.dosing_plan ?? [])
-      .map((e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`)
-      .join("; ");
-    const findings = (result.next_steps ?? [])
-      .flatMap((s) => s.script ?? [])
-      .filter((l) => l.patient_visible)
-      .map((l) => l.patient)
-      .join(" ");
-    voice.say(
-      `Kontrola je hotová. Výsledok: ${result.verdict_label}. ` +
-        `Rozpis liekov: ${plan}. ` +
-        (findings ? `Na čo upozorniť: ${findings}` : "Žiadne upozornenia.")
-    );
-  }, [result, voice.status]);
+  /**
+   * What the agent may read and do.
+   *
+   * The last transcript failed because the agent had a snapshot taken before the card
+   * was even read, so it invented a script and ran ahead of the screen. These read the
+   * live state instead, and drive the same actions the buttons do.
+   */
+  const clientTools = useMemo(
+    () => ({
+      stav_obrazovky: async () => {
+        const s = live.current;
+        const group = s.groups?.[s.groupIndex];
+        const state = {
+          krok: {
+            welcome: "uvod",
+            identity: identityControls.current?.stage === "face" ? "tvar" : "karta",
+            questions: "otazka",
+            review: "recept",
+            result: "vysledok",
+          }[s.phase] ?? s.phase,
+          meno: s.identity?.patient?.name ?? null,
+        };
+
+        if (state.krok === "otazka" && group) {
+          state.otazka = group.questions[0]?.short ?? group.questions[0]?.prompt;
+          state.moznosti = group.questions.flatMap((q) => q.options.map((o) => o.label));
+        }
+        if (s.scenario) {
+          state.recept = (s.scenario.preview ?? []).map(
+            (i) => `${i.trade_name} — ${i.schedule}`
+          );
+        }
+        if (s.result) {
+          state.vysledok = s.result.verdict_label;
+          state.rozpis = (s.result.dosing_plan ?? []).map(
+            (e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`
+          );
+          state.zistenia = (s.result.next_steps ?? [])
+            .flatMap((x) => x.script ?? [])
+            .filter((l) => l.patient_visible)
+            .map((l) => l.patient);
+        }
+        return JSON.stringify(state);
+      },
+
+      pokracuj: async () => {
+        const s = live.current;
+        if (s.phase === "welcome") setPhase("identity");
+        else if (s.phase === "identity") identityControls.current?.next?.();
+        else if (s.phase === "questions") nextGroup();
+        else if (s.phase === "review") await showResult();
+        else if (s.phase === "result") return "Pacient je na poslednej obrazovke.";
+        return "Posunuté.";
+      },
+
+      zapis_odpoved: async ({ lieky }) => {
+        const s = live.current;
+        const group = s.groups?.[s.groupIndex];
+        if (!group) return "Momentálne nie sme na otázke.";
+
+        const wanted = String(lieky || "")
+          .split(";")
+          .map((x) => x.trim().toLowerCase())
+          .filter(Boolean);
+
+        const merged = { ...s.answers };
+        for (const q of group.questions) {
+          const picked = q.options
+            .filter((o) => !o.exclusive && wanted.some((w) => o.label.toLowerCase().includes(w)))
+            .map((o) => o.id);
+          const none = q.options.find((o) => o.exclusive);
+          merged[q.id] = picked.length ? picked : none ? [none.id] : [];
+        }
+        setAnswers(merged);
+        startCheck(merged);
+        setPhase("review");
+        return wanted.length ? `Zapísané: ${wanted.join(", ")}.` : "Zapísané, že neužíva nič iné.";
+      },
+    }),
+    []
+  );
 
   const stepIndex = useMemo(
     () => ({ welcome: 0, identity: 1, questions: 2, review: 3, result: 4 }[phase] ?? 0),
@@ -219,15 +293,25 @@ export default function KioskWizard({ onSessionResult }) {
           {phase === "welcome" && (
             <Screen
               footer={
-                <BigButton
-                  onClick={() => {
-                    setPhase("identity");
-                    if (voice.available) voice.start({ patientName: "pacient" });
-                  }}
-                  full
-                >
-                  Začať
-                </BigButton>
+                <div className="space-y-3">
+                  <BigButton onClick={startVoice} disabled={!voice.available} full>
+                    Preveďte ma hlasom
+                  </BigButton>
+                  <button
+                    onClick={() => {
+                      setMode("tap");
+                      setPhase("identity");
+                    }}
+                    className="w-full rounded-2xl border border-slate-700 text-slate-300 text-lg py-4 hover:border-slate-500 active:scale-[0.99] transition"
+                  >
+                    Budem klikať sám
+                  </button>
+                  {!voice.available && (
+                    <p className="text-center text-[11px] text-slate-600">
+                      Hlasový sprievodca práve nie je dostupný.
+                    </p>
+                  )}
+                </div>
               }
             >
               <div className="text-center">
@@ -236,7 +320,7 @@ export default function KioskWizard({ onSessionResult }) {
                     <path strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 003 9c0 5.6 3.8 10.3 9 11.6 5.2-1.3 9-6 9-11.6 0-1-.1-2-.4-3z" />
                   </svg>
                 </div>
-                <Title sub="Priložíte kartu, odpoviete na jednu otázku a odchádzate s liekmi. Minúta a pol.">
+                <Title sub="Môžem vás previesť hlasom, alebo si všetko odkliknete sami. Obe cesty trvajú asi minútu a pol.">
                   Dobrý deň
                 </Title>
               </div>
@@ -245,6 +329,7 @@ export default function KioskWizard({ onSessionResult }) {
 
           {phase === "identity" && (
             <KioskIdentity
+              controls={identityControls}
               onDone={(id) => {
                 setIdentity(id);
                 setPhase("questions");

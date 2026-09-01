@@ -59,7 +59,7 @@ export default function useVoiceAgent() {
   }, []);
 
   const start = useCallback(
-    async (context = {}) => {
+    async ({ clientTools, ...context } = {}) => {
       if (conversationRef.current) return;
       setStatus("connecting");
       try {
@@ -80,6 +80,9 @@ export default function useVoiceAgent() {
           // from a different endpoint, so the transport has to match what we asked for.
           connectionType: "websocket",
           dynamicVariables: session.dynamic_variables,
+          // The agent reads and drives the kiosk through these rather than through a
+          // snapshot taken before the patient had even tapped their card.
+          clientTools,
           onModeChange: ({ mode }) => setSpeaking(mode === "speaking"),
           onStatusChange: ({ status: s }) => setStatus(s === "connected" ? "live" : s),
           onError: () => setStatus("error"),
