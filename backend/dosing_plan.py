@@ -170,3 +170,72 @@ def as_text(patient_name: str, plan: list[dict], advisories: list[dict]) -> str:
         lines.append("")
     lines.append("Vygenerované systémom AvatarAI Dispense. Nenahrádza pokyny lekára.")
     return "\n".join(lines)
+
+
+# ── Taking it off the kiosk ───────────────────────────────────────────────────
+
+SLOT_TIMES = {"ráno": "080000", "na obed": "120000", "večer": "200000", "na noc": "220000"}
+
+
+def _ascii_slug(text: str) -> str:
+    """iCalendar UIDs must stay ASCII."""
+    import unicodedata
+
+    stripped = "".join(
+        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
+    )
+    return "".join(c for c in stripped if c.isalnum()).lower()
+
+
+def _slots(plan: list[dict]) -> dict[str, list[str]]:
+    """Group the plan by time of day, so a reminder covers everything due at once."""
+    buckets: dict[str, list[str]] = {}
+    for entry in plan:
+        schedule = (entry.get("schedule") or "").lower()
+        for slot in SLOT_TIMES:
+            if slot in schedule:
+                amount = ""
+                for part in schedule.split(","):
+                    if slot in part:
+                        amount = part.replace(slot, "").strip(" .")
+                        break
+                label = f"{entry['trade_name']}" + (f" — {amount}" if amount else "")
+                buckets.setdefault(slot, []).append(label)
+    return buckets
+
+
+def as_icalendar(plan: list[dict], start_date: str, audit_id: str) -> str:
+    """Daily reminders the phone actually keeps.
+
+    One recurring event per time of day rather than one per medicine, so a patient on
+    seven drugs gets two or three notifications a day instead of seven. Times float —
+    no timezone — so 8:00 stays 8:00 wherever the patient is.
+    """
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//AvatarAI Dispense//SK//",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+    ]
+    for slot, medicines in _slots(plan).items():
+        time_part = SLOT_TIMES[slot]
+        description = "\\n".join(medicines)
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{audit_id}-{_ascii_slug(slot)}@avatarai",
+            f"DTSTAMP:{start_date}T{time_part}Z",
+            f"DTSTART:{start_date}T{time_part}",
+            "DURATION:PT15M",
+            "RRULE:FREQ=DAILY",
+            f"SUMMARY:Lieky — {slot}",
+            f"DESCRIPTION:{description}",
+            "BEGIN:VALARM",
+            "TRIGGER:PT0M",
+            "ACTION:DISPLAY",
+            f"DESCRIPTION:Lieky — {slot}",
+            "END:VALARM",
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines)

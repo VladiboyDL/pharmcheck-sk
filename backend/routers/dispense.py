@@ -6,6 +6,7 @@ and returns a single dispense decision with a complete audit record.
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
@@ -15,7 +16,8 @@ from dataclasses import asdict
 from itertools import combinations
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from .. import clinical
@@ -652,7 +654,8 @@ def verify(req: VerifyRequest):
             "checks_run": checks_run,
             "verdict": verdict,
         }
-        _write_audit(db, audit, req.prescription_text, all_findings, interactions)
+        plan = dosing_plan.build(items)
+        _write_audit(db, audit, req.prescription_text, all_findings, interactions, plan)
 
         return {
             "verdict": verdict,
@@ -679,7 +682,7 @@ def verify(req: VerifyRequest):
             "findings": [asdict(f) for f in regimen_findings],
             "next_steps": next_steps,
             "resolutions": resolutions,
-            "dosing_plan": dosing_plan.build(items),
+            "dosing_plan": plan,
             "summary": {
                 "items": len(prescription_items),
                 "interview_items": len(extra),
@@ -702,7 +705,7 @@ def verify(req: VerifyRequest):
         db.close()
 
 
-def _write_audit(db, audit: dict, prescription: str, findings, interactions) -> None:
+def _write_audit(db, audit: dict, prescription: str, findings, interactions, plan=None) -> None:
     """Append-only dispensing log — chain of custody for every decision."""
     try:
         db.execute(
@@ -715,13 +718,19 @@ def _write_audit(db, audit: dict, prescription: str, findings, interactions) -> 
                 verdict TEXT,
                 checks_run INTEGER,
                 prescription TEXT,
-                findings_json TEXT
+                findings_json TEXT,
+                plan_json TEXT
             )"""
         )
+        # Older databases predate plan_json; add it in place rather than migrating.
+        cols = {r[1] for r in db.execute("PRAGMA table_info(dispense_log)")}
+        if "plan_json" not in cols:
+            db.execute("ALTER TABLE dispense_log ADD COLUMN plan_json TEXT")
         db.execute(
             """INSERT OR IGNORE INTO dispense_log
-               (audit_id, timestamp, card_id, patient, verdict, checks_run, prescription, findings_json)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               (audit_id, timestamp, card_id, patient, verdict, checks_run, prescription,
+                findings_json, plan_json)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (
                 audit["audit_id"],
                 audit["timestamp"],
@@ -737,6 +746,7 @@ def _write_audit(db, audit: dict, prescription: str, findings, interactions) -> 
                     },
                     ensure_ascii=False,
                 ),
+                json.dumps(plan, ensure_ascii=False),
             ),
         )
         db.commit()
@@ -823,3 +833,103 @@ def send_plan(req: SendPlanRequest):
             "reason": "E-mail sa nepodarilo odoslať.",
             "preview": body,
         }
+
+
+@router.get("/plan/{audit_id}.ics")
+def plan_calendar(audit_id: str):
+    """Daily medication reminders, as a calendar file the phone keeps."""
+    stored = _load_plan(audit_id)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Rozpis sa nenašiel")
+
+    ics = dosing_plan.as_icalendar(
+        stored["plan"], time.strftime("%Y%m%d"), audit_id
+    )
+    return Response(
+        content=ics,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="lieky-{audit_id}.ics"'},
+    )
+
+
+@router.get("/plan/{audit_id}", response_class=HTMLResponse)
+def plan_page(audit_id: str):
+    """The page behind the QR code.
+
+    Deliberately a plain server-rendered page: it opens on any phone, prints, and can
+    be added to the home screen. Scanning plain text would have shown the plan and
+    then lost it — this is something the patient can keep.
+    """
+    stored = _load_plan(audit_id)
+    if not stored:
+        return HTMLResponse(
+            "<!doctype html><meta charset='utf-8'><title>Rozpis nenájdený</title>"
+            "<p style='font:16px system-ui;padding:2rem'>Tento rozpis už nie je dostupný.</p>",
+            status_code=404,
+        )
+
+    rows = []
+    for entry in stored["plan"]:
+        extras = "".join(
+            f'<p class="note">{html.escape(text)}</p>'
+            for text in (entry.get("when"), entry.get("avoid"))
+            if text
+        )
+        rows.append(
+            f'<li><h2>{html.escape(entry["trade_name"])}</h2>'
+            f'<p class="when">{html.escape(entry["schedule"])}</p>{extras}</li>'
+        )
+
+    return HTMLResponse(PLAN_PAGE.format(
+        name=html.escape(stored.get("patient") or ""),
+        rows="".join(rows),
+        audit_id=html.escape(audit_id),
+    ))
+
+
+PLAN_PAGE = """<!doctype html>
+<html lang="sk"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rozpis liekov</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; padding:1.5rem 1.25rem 3rem; font:16px/1.55 system-ui,-apple-system,sans-serif;
+         background:#f7f8f7; color:#121a17; max-width:34rem; margin-inline:auto; }}
+  @media (prefers-color-scheme: dark) {{ body {{ background:#0d1512; color:#e6edea; }} }}
+  header {{ border-bottom:2px solid currentColor; padding-bottom:.9rem; margin-bottom:1.25rem; }}
+  h1 {{ font-size:1.5rem; margin:0 0 .2rem; letter-spacing:-.02em; }}
+  .who {{ opacity:.6; font-size:.9rem; }}
+  ul {{ list-style:none; padding:0; margin:0; display:grid; gap:.85rem; }}
+  li {{ border:1px solid rgba(128,128,128,.3); border-radius:12px; padding:.9rem 1rem; }}
+  h2 {{ font-size:1.05rem; margin:0 0 .3rem; }}
+  .when {{ margin:0; font-weight:600; color:#0f7b5a; }}
+  @media (prefers-color-scheme: dark) {{ .when {{ color:#47c295; }} }}
+  .note {{ margin:.35rem 0 0; font-size:.9rem; opacity:.75; }}
+  .cta {{ display:block; margin:1.5rem 0 0; padding:1rem; border-radius:14px; background:#0f7b5a;
+          color:#fff; text-align:center; font-weight:600; text-decoration:none; }}
+  @media (prefers-color-scheme: dark) {{ .cta {{ background:#47c295; color:#08110d; }} }}
+  footer {{ margin-top:2rem; font-size:.78rem; opacity:.55; }}
+  @media print {{ .cta {{ display:none; }} body {{ background:#fff; color:#000; }} }}
+</style></head><body>
+<header><h1>Rozpis liekov</h1><p class="who">{name}</p></header>
+<ul>{rows}</ul>
+<a class="cta" href="/api/dispense/plan/{audit_id}.ics">Pridať pripomienky do kalendára</a>
+<footer>Vygenerované systémom AvatarAI Dispense. Nenahrádza pokyny lekára ani lekárnika.</footer>
+</body></html>"""
+
+
+def _load_plan(audit_id: str) -> dict | None:
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT patient, plan_json FROM dispense_log WHERE audit_id = ?", (audit_id,)
+        ).fetchone()
+        if not row or not row["plan_json"]:
+            return None
+        return {"patient": row["patient"], "plan": json.loads(row["plan_json"])}
+    except Exception:
+        return None
+    finally:
+        db.close()

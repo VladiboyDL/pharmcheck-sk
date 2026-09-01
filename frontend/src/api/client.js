@@ -1,5 +1,10 @@
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+/** Absolute form of API_BASE — needed for anything a phone has to open, like a QR. */
+export const API_ORIGIN = API_BASE.startsWith("http")
+  ? API_BASE
+  : `${window.location.origin}${API_BASE}`;
+
 export async function searchDrugs(query, limit = 15) {
   const res = await fetch(`${API_BASE}/drugs/search?q=${encodeURIComponent(query)}&limit=${limit}`);
   if (!res.ok) throw new Error("Search failed");
