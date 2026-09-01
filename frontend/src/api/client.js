@@ -149,3 +149,19 @@ export async function getScenarios() {
   if (!res.ok) throw new Error("Nepodarilo sa načítať scenáre");
   return res.json();
 }
+
+export async function sendPlan({ auditId, email, patientName, plan, advisories = [] }) {
+  const res = await fetch(`${API_BASE}/dispense/send-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      audit_id: auditId,
+      email,
+      patient_name: patientName,
+      plan,
+      advisories,
+    }),
+  });
+  if (!res.ok) throw new Error("Odoslanie zlyhalo");
+  return res.json();
+}

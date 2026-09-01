@@ -7,6 +7,8 @@ and returns a single dispense decision with a complete audit record.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 import uuid
 from dataclasses import asdict
@@ -18,10 +20,12 @@ from pydantic import BaseModel
 
 from .. import clinical
 from ..ai_checker import ANTHROPIC_API_KEY, check_interaction_ai
-from .. import intake, resolver, substances
+from .. import dosing_plan, intake, resolver, substances
 from ..database import get_db
 from ..patients import get_patient
 from ..prescription import resolve
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dispense", tags=["dispense"])
 
@@ -675,6 +679,7 @@ def verify(req: VerifyRequest):
             "findings": [asdict(f) for f in regimen_findings],
             "next_steps": next_steps,
             "resolutions": resolutions,
+            "dosing_plan": dosing_plan.build(items),
             "summary": {
                 "items": len(prescription_items),
                 "interview_items": len(extra),
@@ -757,3 +762,64 @@ def dispense_log(limit: int = 50):
         return {"entries": [dict(r) for r in rows]}
     finally:
         db.close()
+
+
+# ── Taking the plan home ──────────────────────────────────────────────────────
+
+
+class SendPlanRequest(BaseModel):
+    audit_id: str
+    email: str
+    patient_name: Optional[str] = None
+    plan: list[dict]
+    advisories: list[str] = []
+
+
+@router.post("/send-plan")
+def send_plan(req: SendPlanRequest):
+    """Email the dosing plan, when a provider is configured.
+
+    Health data over ordinary email is a GDPR problem, not a feature — a real
+    deployment sends a link behind authentication, or hands over a printed slip.
+    This endpoint exists so the flow is complete and so wiring a provider is one
+    environment variable, but it says plainly when nothing was actually sent.
+    """
+    body = dosing_plan.as_text(req.patient_name or "", req.plan, req.advisories)
+    api_key = os.getenv("RESEND_API_KEY", "")
+    sender = os.getenv("PLAN_SENDER", "")
+
+    if not api_key or not sender:
+        return {
+            "sent": False,
+            "simulated": True,
+            "reason": "Odosielanie e-mailov nie je nakonfigurované — nastavte RESEND_API_KEY a PLAN_SENDER.",
+            "preview": body,
+        }
+
+    try:
+        import urllib.request
+
+        payload = json.dumps(
+            {
+                "from": sender,
+                "to": [req.email],
+                "subject": "Rozpis vašich liekov",
+                "text": body,
+            }
+        ).encode()
+        request = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read()
+        return {"sent": True, "simulated": False, "preview": body}
+    except Exception as e:
+        logger.warning(f"send-plan failed: {e}")
+        return {
+            "sent": False,
+            "simulated": False,
+            "reason": "E-mail sa nepodarilo odoslať.",
+            "preview": body,
+        }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Screen, Title, BigButton, Badge, Rail } from "./KioskShell";
+import TakeAway from "./TakeAway";
 
 /**
  * The outcome, paced one card at a time.
@@ -12,6 +13,7 @@ export default function KioskOutcome({ data, onRestart }) {
   const [page, setPage] = useState(0);
 
   const takeHome = data.items.filter((i) => i.source !== "interview" && i.status !== "verify");
+  const plan = data.dosing_plan ?? [];
   const held = data.items.filter((i) => i.source !== "interview" && i.status === "verify");
   const declined = data.items.filter((i) => i.status === "decline");
 
@@ -35,11 +37,11 @@ export default function KioskOutcome({ data, onRestart }) {
     }
     // Two or three things get remembered. Beyond that it is a lecture, and the
     // patient came here to leave with medicine.
-    return out.slice(0, 3);
+    return out.slice(0, 2);
   }, [data]);
 
-  // No separate closing screen: the last card ends the journey.
-  const pages = 1 + cards.length;
+  // Meds + schedule, the advisories, then the take-away.
+  const pages = 1 + cards.length + 1;
   const next = () => setPage((p) => Math.min(p + 1, pages - 1));
 
   // ── Page 0: your medicines ────────────────────────────────────────────────
@@ -66,38 +68,38 @@ export default function KioskOutcome({ data, onRestart }) {
           <Title
             sub={
               held.length
-                ? "Jeden liek si ešte overíme u vášho lekára, ostatné si vyzdvihnite pri okienku."
-                : "Vyzdvihnite si ich pri okienku."
+                ? "Jeden liek si ešte overíme u vášho lekára, ostatné sú pripravené."
+                : "Lieky sú pripravené. Rozpis si o chvíľu odnesiete so sebou."
             }
           >
-            {takeHome.length
-              ? "Vaše lieky sú pripravené"
-              : "Musíme sa najprv spojiť s vaším lekárom"}
+            {takeHome.length ? "Takto ich budete užívať" : "Musíme sa najprv spojiť s vaším lekárom"}
           </Title>
 
-          {takeHome.length > 0 && (
-            <ul className="mt-8 mx-auto max-w-md space-y-2 text-left">
-              {takeHome.map((it) => (
+          {plan.length > 0 && (
+            <ul className="mt-7 mx-auto max-w-lg space-y-2.5 text-left">
+              {plan.map((entry) => (
                 <li
-                  key={it.key}
-                  className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
+                  key={entry.trade_name}
+                  className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3.5"
                 >
-                  <span className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-300 grid place-items-center flex-shrink-0">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                  <span className="text-slate-100">{it.trade_name}</span>
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-300 grid place-items-center flex-shrink-0 mt-0.5">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-slate-100 font-medium leading-tight">{entry.trade_name}</p>
+                      <p className="text-cyan-300 text-sm mt-0.5">{entry.schedule}</p>
+                      {entry.when && <p className="text-slate-400 text-sm mt-0.5">{entry.when}</p>}
+                      {entry.avoid && (
+                        <p className="text-amber-300/90 text-sm mt-0.5">{entry.avoid}</p>
+                      )}
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
-          )}
-
-          {cards.length > 0 && (
-            <p className="mt-7 text-sm text-slate-400">
-              Mám pre vás {cards.length}{" "}
-              {cards.length === 1 ? "upozornenie" : cards.length < 5 ? "upozornenia" : "upozornení"}.
-            </p>
           )}
         </div>
       </Screen>
@@ -107,7 +109,7 @@ export default function KioskOutcome({ data, onRestart }) {
   // ── Pages 1..n: one point at a time, the last one closes ──────────────────
   if (page <= cards.length) {
     const c = cards[page - 1];
-    const last = page === cards.length;
+    const last = false;
     return (
       <Screen
         footer={
@@ -150,7 +152,7 @@ export default function KioskOutcome({ data, onRestart }) {
     );
   }
 
-  return null;
+  return <TakeAway data={data} onDone={onRestart} />;
 }
 
 function Line({ text, tone }) {
