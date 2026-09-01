@@ -137,21 +137,16 @@ export async function getScenarios() {
   return res.json();
 }
 
-export async function sendPlan({ auditId, email, patientName, plan, advisories = [] }) {
+export async function sendPlan({ token, email }) {
   const res = await fetch(`${API_BASE}/dispense/send-plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      audit_id: auditId,
-      email,
-      patient_name: patientName,
-      plan,
-      advisories,
-    }),
+    body: JSON.stringify({ token, email }),
   });
   if (!res.ok) throw new Error("Odoslanie zlyhalo");
   return res.json();
 }
+
 
 export async function notifyPrescriber({ auditId, prescriber, patient, subject, detail }) {
   const res = await fetch(`${API_BASE}/dispense/notify-prescriber`, {

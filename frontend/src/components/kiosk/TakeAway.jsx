@@ -21,8 +21,8 @@ export default function TakeAway({ data, onDone }) {
   const plan = data.dosing_plan ?? [];
 
   useEffect(() => {
-    if (!canvasRef.current || !plan.length) return;
-    const url = `${API_ORIGIN}/dispense/plan/${data.audit.audit_id}`;
+    if (!canvasRef.current || !plan.length || !data.plan_token) return;
+    const url = `${API_ORIGIN}/dispense/plan/${data.plan_token}`;
     QRCode.toCanvas(canvasRef.current, url, {
       width: 208,
       margin: 1,
@@ -35,16 +35,9 @@ export default function TakeAway({ data, onDone }) {
     e.preventDefault();
     setSending(true);
     try {
-      const res = await sendPlan({
-        auditId: data.audit.audit_id,
-        email,
-        patientName: data.patient?.name,
-        plan,
-        advisories: (data.next_steps ?? [])
-          .flatMap((s) => s.script ?? [])
-          .map((l) => l.patient)
-          .filter(Boolean),
-      });
+      // Only the token and the address travel; the body is built from what the
+      // server already stored, so this cannot be used to mail arbitrary text.
+      const res = await sendPlan({ token: data.plan_token, email });
       setSent(res);
     } catch {
       setSent({ sent: false, reason: "Odoslanie zlyhalo." });

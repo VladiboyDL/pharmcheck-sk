@@ -1,8 +1,9 @@
 from __future__ import annotations
 from itertools import combinations
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from .. import security
 from ..database import get_db
 from ..ai_checker import check_interaction_ai, explain_interaction_ai, ANTHROPIC_API_KEY
 from ..models import (
@@ -71,7 +72,8 @@ def _find_interaction_ai(db, substance_a: str, substance_b: str) -> dict | None:
 
 
 @router.post("/check", response_model=InteractionCheckResponse)
-def check_interactions(req: InteractionCheckRequest):
+def check_interactions(req: InteractionCheckRequest, request: Request):
+    security.rate_limit(request, "check", limit=60)
     if len(req.drug_ids) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 drugs to check interactions")
     if len(req.drug_ids) > 20:
@@ -174,13 +176,14 @@ class ExplainRequest(BaseModel):
 
 
 @router.post("/explain")
-def explain(req: ExplainRequest):
+def explain(req: ExplainRequest, request: Request):
     """Clinical text for one pair, fetched when the pharmacist opens it.
 
     Kept out of the dispense pass on purpose: generating text costs seconds, and the
     dispense decision must stay fast and reproducible. Serves the stored text when it
     exists, generates and persists it otherwise.
     """
+    security.rate_limit(request, "explain", limit=30)
     db = get_db()
     try:
         sa = req.substance_a.split(",")[0].strip().lower()

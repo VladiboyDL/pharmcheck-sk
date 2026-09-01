@@ -13,8 +13,10 @@ import os
 import urllib.parse
 import urllib.request
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
+
+from .. import security
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +54,10 @@ def config():
 
 
 @router.post("/session")
-def session(req: SessionRequest):
+def session(req: SessionRequest, request: Request):
     """A short-lived signed URL for one conversation, plus this patient's context."""
+    # Every signed URL is a paid conversation; without a cap anyone can drain the quota.
+    security.rate_limit(request, "voice", limit=10, window_secs=300)
     api_key, agent_id = _config()
     variables = {
         "patient_name": req.patient_name or "pacient",

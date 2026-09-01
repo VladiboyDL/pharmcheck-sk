@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import logging
 import os
 import time
@@ -16,13 +17,13 @@ from dataclasses import asdict
 from itertools import combinations
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .. import clinical
 from ..ai_checker import ANTHROPIC_API_KEY, check_interaction_ai
-from .. import dosing_plan, intake, resolver, substances
+from .. import dosing_plan, intake, resolver, security, substances
 from ..database import get_db
 from ..patients import get_patient
 from ..prescription import resolve
@@ -131,47 +132,60 @@ class VerifyRequest(BaseModel):
     patient_override: Optional[dict] = None
 
 
-def _interaction_row(db, sub_a: str, sub_b: str) -> tuple[dict | None, str, list[str]]:
-    """Look up one pair, normalising registry salt names onto interaction-data names.
+def _resolve_components(db, substance: str) -> tuple[list[str], list[str]]:
+    """Split a registry substance into interaction-data names, plus what did not resolve."""
+    resolved, unknown = [], []
+    for component in substances.split_components(substance):
+        name, _ = substances.resolve(db, component)
+        (resolved if name else unknown).append(name or component)
+    return resolved, unknown
 
-    Returns (interaction, coverage, unknown_substances). Coverage is "checked" when
-    both substances exist in the interaction data — only then does the absence of a
-    row mean anything. Otherwise it is "unverified" and must never read as safe.
+
+def _load_interactions(db, names: set[str]) -> dict[frozenset[str], dict]:
+    """Every interaction among a set of substances, in one query.
+
+    The pair count grows with the square of the prescription, and a query per pair
+    with it. One IN-clause over the whole regimen is the same work for SQLite and a
+    fraction of the round trips.
     """
-    resolved_a, unknown = [], []
-    for component in substances.split_components(sub_a):
-        name, status = substances.resolve(db, component)
-        (resolved_a.append(name) if name else unknown.append(component))
-    resolved_b = []
-    for component in substances.split_components(sub_b):
-        name, status = substances.resolve(db, component)
-        (resolved_b.append(name) if name else unknown.append(component))
+    if len(names) < 2:
+        return {}
+    ordered = sorted(names)
+    placeholders = ",".join("?" * len(ordered))
+    rows = db.execute(
+        f"""SELECT drug_a, drug_b, severity, mechanism, management, alternatives
+            FROM interactions
+            WHERE LOWER(drug_a) IN ({placeholders}) AND LOWER(drug_b) IN ({placeholders})""",
+        ordered + ordered,
+    ).fetchall()
 
-    if not resolved_a or not resolved_b:
-        return None, "unverified", unknown
+    found: dict[frozenset[str], dict] = {}
+    for row in rows:
+        key = frozenset({row["drug_a"].lower(), row["drug_b"].lower()})
+        if len(key) < 2:
+            continue
+        current = found.get(key)
+        if current is None or SEVERITY_RANK.get(row["severity"], 9) < SEVERITY_RANK.get(
+            current["severity"], 9
+        ):
+            found[key] = {**dict(row), "source": "db"}
+    return found
 
+
+def _pair_interaction(index: dict, a_names: list[str], b_names: list[str]) -> dict | None:
+    """Worst interaction between two resolved substance lists, from the prefetched index."""
     best = None
-    for sa in resolved_a:
-        for sb in resolved_b:
+    for sa in a_names:
+        for sb in b_names:
             if sa == sb:
                 continue
-            row = db.execute(
-                """SELECT severity, mechanism, management, alternatives FROM interactions
-                   WHERE (LOWER(drug_a)=? AND LOWER(drug_b)=?) OR (LOWER(drug_a)=? AND LOWER(drug_b)=?)
-                   LIMIT 1""",
-                (sa, sb, sb, sa),
-            ).fetchone()
-            if row:
-                r = dict(row)
-                r["source"] = "db"
-                r["resolved_a"], r["resolved_b"] = sa, sb
-                if best is None or SEVERITY_RANK.get(r["severity"], 9) < SEVERITY_RANK.get(best["severity"], 9):
-                    best = r
-
-    # A pair is only "checked" when every component resolved; a partial resolution
-    # still leaves an unchecked component.
-    coverage = "checked" if not unknown else "unverified"
-    return best, coverage, unknown
+            hit = index.get(frozenset({sa, sb}))
+            if hit and (
+                best is None
+                or SEVERITY_RANK.get(hit["severity"], 9) < SEVERITY_RANK.get(best["severity"], 9)
+            ):
+                best = hit
+    return best
 
 
 @router.get("/scenarios")
@@ -558,7 +572,8 @@ def _prescriber_message(problem_items, item_findings, regimen_findings, interact
 
 
 @router.post("/verify")
-def verify(req: VerifyRequest):
+def verify(req: VerifyRequest, request: Request):
+    security.rate_limit(request, "verify", limit=60)
     started = time.perf_counter()
     db = get_db()
     try:
@@ -624,13 +639,24 @@ def verify(req: VerifyRequest):
         checks_run += len(clinical.THERAPEUTIC_CLASSES) + 4
 
         # ── 5. Pairwise interactions ───────────────────────────────────────────
+        resolved_names: dict[str, tuple[list[str], list[str]]] = {
+            it["key"]: _resolve_components(db, it["active_substance"]) for it in items
+        }
+        index = _load_interactions(
+            db, {n for names, _ in resolved_names.values() for n in names}
+        )
+
         interactions = []
         unverified: list[dict] = []
         pairs_checked = 0
         ai_calls = 0
         for a, b in combinations(items, 2):
             pairs_checked += 1
-            hit, coverage, unknown = _interaction_row(db, a["active_substance"], b["active_substance"])
+            a_names, a_unknown = resolved_names[a["key"]]
+            b_names, b_unknown = resolved_names[b["key"]]
+            unknown = a_unknown + b_unknown
+            hit = _pair_interaction(index, a_names, b_names) if a_names and b_names else None
+            coverage = "checked" if not unknown and a_names and b_names else "unverified"
 
             # Deep AI discovery is opt-in: it costs seconds per pair, and the dispense
             # decision must stay fast and reproducible.
@@ -752,8 +778,12 @@ def verify(req: VerifyRequest):
         duration_ms = round((time.perf_counter() - started) * 1000, 1)
 
         # ── 8. Audit record ────────────────────────────────────────────────────
+        # A ten-hex audit id is fine for a console row but far too guessable for a
+        # public link to someone's medication. The QR uses this instead.
+        plan_token = security.public_token()
         audit = {
             "audit_id": f"AV-{uuid.uuid4().hex[:10].upper()}",
+            "plan_token": plan_token,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "operator": "AvatarAI Dispense Engine v1",
             "identity_verified": req.identity_verified,
@@ -810,6 +840,7 @@ def verify(req: VerifyRequest):
             },
             "audit": audit,
             "prescriber": (scenario or {}).get("prescriber"),
+            "plan_token": plan_token,
         }
     finally:
         db.close()
@@ -829,18 +860,21 @@ def _write_audit(db, audit: dict, prescription: str, findings, interactions, pla
                 checks_run INTEGER,
                 prescription TEXT,
                 findings_json TEXT,
-                plan_json TEXT
+                plan_json TEXT,
+                plan_token TEXT
             )"""
         )
         # Older databases predate plan_json; add it in place rather than migrating.
         cols = {r[1] for r in db.execute("PRAGMA table_info(dispense_log)")}
         if "plan_json" not in cols:
             db.execute("ALTER TABLE dispense_log ADD COLUMN plan_json TEXT")
+        if "plan_token" not in cols:
+            db.execute("ALTER TABLE dispense_log ADD COLUMN plan_token TEXT")
         db.execute(
             """INSERT OR IGNORE INTO dispense_log
                (audit_id, timestamp, card_id, patient, verdict, checks_run, prescription,
-                findings_json, plan_json)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                findings_json, plan_json, plan_token)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 audit["audit_id"],
                 audit["timestamp"],
@@ -857,6 +891,7 @@ def _write_audit(db, audit: dict, prescription: str, findings, interactions, pla
                     ensure_ascii=False,
                 ),
                 json.dumps(plan, ensure_ascii=False),
+                audit.get("plan_token"),
             ),
         )
         db.commit()
@@ -866,7 +901,12 @@ def _write_audit(db, audit: dict, prescription: str, findings, interactions, pla
 
 @router.get("/log")
 def dispense_log(limit: int = 50):
-    """Recent dispensing decisions — the audit trail."""
+    """Recent dispensing decisions — the audit trail.
+
+    Names are initials and card numbers are dropped. The console shows this to prove
+    a chain of custody exists, which needs no identifying detail; returning the real
+    values made an unauthenticated endpoint into a list of who collected what.
+    """
     db = get_db()
     try:
         db.execute(
@@ -875,11 +915,15 @@ def dispense_log(limit: int = 50):
                 patient TEXT, verdict TEXT, checks_run INTEGER, prescription TEXT, findings_json TEXT)"""
         )
         rows = db.execute(
-            """SELECT audit_id, timestamp, card_id, patient, verdict, checks_run
+            """SELECT audit_id, timestamp, patient, verdict, checks_run
                FROM dispense_log ORDER BY id DESC LIMIT ?""",
-            (limit,),
+            (min(limit, 100),),
         ).fetchall()
-        return {"entries": [dict(r) for r in rows]}
+        return {
+            "entries": [
+                {**dict(r), "patient": security.mask_name(r["patient"])} for r in rows
+            ]
+        }
     finally:
         db.close()
 
@@ -888,15 +932,22 @@ def dispense_log(limit: int = 50):
 
 
 class SendPlanRequest(BaseModel):
-    audit_id: str
+    # The token proves the caller just completed this dispense. Nothing about the
+    # message body comes from the client any more.
+    token: str
     email: str
-    patient_name: Optional[str] = None
-    plan: list[dict]
-    advisories: list[str] = []
+
+    @field_validator("email")
+    @classmethod
+    def _plausible_address(cls, value: str) -> str:
+        # A shape check, not RFC 5322 — enough to reject junk without a dependency.
+        if not re.fullmatch(r"[^@\s]{1,64}@[^@\s.]+(\.[^@\s.]+)+", value.strip()):
+            raise ValueError("Neplatná e-mailová adresa")
+        return value.strip()
 
 
 @router.post("/send-plan")
-def send_plan(req: SendPlanRequest):
+def send_plan(req: SendPlanRequest, request: Request):
     """Email the dosing plan, when a provider is configured.
 
     Health data over ordinary email is a GDPR problem, not a feature — a real
@@ -904,7 +955,15 @@ def send_plan(req: SendPlanRequest):
     This endpoint exists so the flow is complete and so wiring a provider is one
     environment variable, but it says plainly when nothing was actually sent.
     """
-    body = dosing_plan.as_text(req.patient_name or "", req.plan, req.advisories)
+    security.rate_limit(request, "send-plan", limit=5, window_secs=300)
+
+    # Built from what we stored, not from what was posted — otherwise this endpoint
+    # will send arbitrary text to an arbitrary address for anyone who finds it.
+    stored = _load_plan(req.token)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Rozpis sa nenašiel")
+    body = dosing_plan.as_text(stored.get("patient") or "", stored["plan"], [])
+
     api_key = os.getenv("RESEND_API_KEY", "")
     sender = os.getenv("PLAN_SENDER", "")
 
@@ -945,32 +1004,35 @@ def send_plan(req: SendPlanRequest):
         }
 
 
-@router.get("/plan/{audit_id}.ics")
-def plan_calendar(audit_id: str):
+@router.get("/plan/{token}.ics")
+def plan_calendar(token: str, request: Request):
     """Daily medication reminders, as a calendar file the phone keeps."""
-    stored = _load_plan(audit_id)
+    security.rate_limit(request, "plan", limit=60)
+    stored = _load_plan(token)
     if not stored:
         raise HTTPException(status_code=404, detail="Rozpis sa nenašiel")
 
-    ics = dosing_plan.as_icalendar(
-        stored["plan"], time.strftime("%Y%m%d"), audit_id
-    )
+    ics = dosing_plan.as_icalendar(stored["plan"], time.strftime("%Y%m%d"), stored["audit_id"])
     return Response(
         content=ics,
         media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="lieky-{audit_id}.ics"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="lieky.ics"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
-@router.get("/plan/{audit_id}", response_class=HTMLResponse)
-def plan_page(audit_id: str):
+@router.get("/plan/{token}", response_class=HTMLResponse)
+def plan_page(token: str, request: Request):
     """The page behind the QR code.
 
     Deliberately a plain server-rendered page: it opens on any phone, prints, and can
     be added to the home screen. Scanning plain text would have shown the plan and
     then lost it — this is something the patient can keep.
     """
-    stored = _load_plan(audit_id)
+    security.rate_limit(request, "plan", limit=60)
+    stored = _load_plan(token)
     if not stored:
         return HTMLResponse(
             "<!doctype html><meta charset='utf-8'><title>Rozpis nenájdený</title>"
@@ -990,11 +1052,16 @@ def plan_page(audit_id: str):
             f'<p class="when">{html.escape(entry["schedule"])}</p>{extras}</li>'
         )
 
-    return HTMLResponse(PLAN_PAGE.format(
-        name=html.escape(stored.get("patient") or ""),
-        rows="".join(rows),
-        audit_id=html.escape(audit_id),
-    ))
+    return HTMLResponse(
+        PLAN_PAGE.format(
+            name=html.escape(stored.get("patient") or ""),
+            rows="".join(rows),
+            token=html.escape(token),
+        ),
+        # A medication list should not sit in a shared cache or a browser history entry
+        # that outlives the visit.
+        headers={"Cache-Control": "no-store, max-age=0", "Referrer-Policy": "no-referrer"},
+    )
 
 
 PLAN_PAGE = """<!doctype html>
@@ -1025,20 +1092,28 @@ PLAN_PAGE = """<!doctype html>
 </style></head><body>
 <header><h1>Rozpis liekov</h1><p class="who">{name}</p></header>
 <ul>{rows}</ul>
-<a class="cta" href="/api/dispense/plan/{audit_id}.ics">Pridať pripomienky do kalendára</a>
+<a class="cta" href="/api/dispense/plan/{token}.ics">Pridať pripomienky do kalendára</a>
 <footer>Vygenerované systémom AvatarAI Dispense. Nenahrádza pokyny lekára ani lekárnika.</footer>
 </body></html>"""
 
 
-def _load_plan(audit_id: str) -> dict | None:
+def _load_plan(token: str) -> dict | None:
+    """Look a plan up by its public token, never by the audit id."""
+    if not token or len(token) < 16:
+        return None
     db = get_db()
     try:
         row = db.execute(
-            "SELECT patient, plan_json FROM dispense_log WHERE audit_id = ?", (audit_id,)
+            "SELECT audit_id, patient, plan_json FROM dispense_log WHERE plan_token = ?",
+            (token,),
         ).fetchone()
         if not row or not row["plan_json"]:
             return None
-        return {"patient": row["patient"], "plan": json.loads(row["plan_json"])}
+        return {
+            "audit_id": row["audit_id"],
+            "patient": row["patient"],
+            "plan": json.loads(row["plan_json"]),
+        }
     except Exception:
         return None
     finally:
@@ -1057,7 +1132,7 @@ class NotifyPrescriberRequest(BaseModel):
 
 
 @router.post("/notify-prescriber")
-def notify_prescriber(req: NotifyPrescriberRequest):
+def notify_prescriber(req: NotifyPrescriberRequest, request: Request):
     """Send the finding back to the doctor who wrote the prescription.
 
     The evidence for this is better than for anything else the counter can do about
@@ -1068,6 +1143,7 @@ def notify_prescriber(req: NotifyPrescriberRequest):
     Delivery is out of scope for the demo — production routes this over the national
     e-prescribing channel, not email. What is real here is the queue and the record.
     """
+    security.rate_limit(request, "notify", limit=20)
     db = get_db()
     try:
         db.execute(
@@ -1110,6 +1186,7 @@ def notify_prescriber(req: NotifyPrescriberRequest):
 @router.get("/prescriber-notifications")
 def prescriber_notifications(limit: int = 25):
     """What has been queued back to prescribers — visible in the pharmacist console."""
+    security.rate_limit(request, "notify", limit=20)
     db = get_db()
     try:
         db.execute(
@@ -1120,8 +1197,12 @@ def prescriber_notifications(limit: int = 25):
         rows = db.execute(
             """SELECT audit_id, created_at, prescriber, patient, subject, delivered
                FROM prescriber_notifications ORDER BY id DESC LIMIT ?""",
-            (limit,),
+            (min(limit, 100),),
         ).fetchall()
-        return {"notifications": [dict(r) for r in rows]}
+        return {
+            "notifications": [
+                {**dict(r), "patient": security.mask_name(r["patient"])} for r in rows
+            ]
+        }
     finally:
         db.close()
