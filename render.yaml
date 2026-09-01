@@ -6,7 +6,7 @@
 
 services:
   - type: web
-    name: avatarai-dispense-api
+    name: pharmcheck-api
     runtime: python
     region: frankfurt
     plan: starter
@@ -22,13 +22,13 @@ services:
         sync: false
 
   - type: web
-    name: avatarai-dispense
+    name: pharmcheck-dashboard
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://avatarai-dispense-api.onrender.com/api
+        value: https://pharmcheck-api.onrender.com/api
     routes:
       - type: rewrite
         source: /*
