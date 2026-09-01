@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Screen, Title, BigButton, Badge, Rail } from "./KioskShell";
 import TakeAway from "./TakeAway";
+import { notifyPrescriber } from "../../api/client";
 
 /**
  * The outcome, paced one card at a time.
@@ -23,7 +24,13 @@ export default function KioskOutcome({ data, onRestart }) {
     const out = [];
     const counselStep = (data.next_steps ?? []).find((s) => s.kind === "counsel");
     for (const line of (counselStep?.script ?? []).slice(0, 2)) {
-      out.push({ kind: "advice", topic: line.topic, ask: line.ask, body: line.patient || line.say });
+      out.push({
+        kind: "advice",
+        topic: line.topic,
+        headline: line.title || line.topic,
+        body: line.patient || line.say,
+        notify: line.notify_prescriber === true,
+      });
     }
     for (const r of data.resolutions ?? []) {
       out.push({
@@ -127,7 +134,7 @@ export default function KioskOutcome({ data, onRestart }) {
           </Badge>
 
           <div className="mt-5">
-            <Title sub={c.body}>{c.headline || c.ask}</Title>
+            <Title sub={c.body}>{c.headline}</Title>
           </div>
 
           {c.substitute && (
@@ -143,9 +150,12 @@ export default function KioskOutcome({ data, onRestart }) {
           {c.caveat && <p className="mt-6 mx-auto max-w-md text-sm text-amber-300/90">{c.caveat}</p>}
 
           {c.kind === "advice" && (
-            <p className="mt-7 mx-auto max-w-md text-sm text-slate-500">
-              Nie je to dôvod liek nebrať. Spomeňte to prosím lekárovi pri najbližšej návšteve.
-            </p>
+            <>
+              {c.notify && <NotifyPrescriber data={data} subject={c.topic} detail={c.body} />}
+              <p className="mt-6 mx-auto max-w-md text-sm text-slate-500">
+                Lieky preto nevysadzujte ani si sami nemeňte dávku.
+              </p>
+            </>
           )}
         </div>
       </Screen>
@@ -153,6 +163,51 @@ export default function KioskOutcome({ data, onRestart }) {
   }
 
   return <TakeAway data={data} onDone={onRestart} />;
+}
+
+/**
+ * Sending the finding to the doctor who wrote the prescription.
+ *
+ * Telling a patient to "mention it next time" changes little; an asynchronous message
+ * to the prescriber changed the prescription within a week in roughly a quarter of
+ * cases. So this is an action, not a reminder.
+ */
+function NotifyPrescriber({ data, subject, detail }) {
+  const [state, setState] = useState("idle"); // idle | sending | done
+
+  async function send() {
+    setState("sending");
+    try {
+      await notifyPrescriber({
+        auditId: data.audit.audit_id,
+        prescriber: data.prescriber,
+        patient: data.patient?.name,
+        subject,
+        detail,
+      });
+    } catch {
+      /* the queue is best-effort; the patient still leaves with the advice */
+    }
+    setState("done");
+  }
+
+  if (state === "done") {
+    return (
+      <div className="mt-6 mx-auto max-w-md rounded-2xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
+        Správu sme pripravili pre {data.prescriber || "vášho lekára"}.
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={send}
+      disabled={state === "sending"}
+      className="mt-6 mx-auto block rounded-2xl border-2 border-cyan-700 bg-cyan-950/40 px-6 py-3.5 text-cyan-200 text-base hover:border-cyan-500 active:scale-[0.99] transition disabled:opacity-50"
+    >
+      {state === "sending" ? "Odosielam…" : "Upozorniť lekára, ktorý recept vystavil"}
+    </button>
+  );
 }
 
 function Line({ text, tone }) {

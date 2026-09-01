@@ -170,3 +170,13 @@ export async function sendPlan({ auditId, email, patientName, plan, advisories =
   if (!res.ok) throw new Error("Odoslanie zlyhalo");
   return res.json();
 }
+
+export async function notifyPrescriber({ auditId, prescriber, patient, subject, detail }) {
+  const res = await fetch(`${API_BASE}/dispense/notify-prescriber`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audit_id: auditId, prescriber, patient, subject, detail }),
+  });
+  if (!res.ok) throw new Error("Odoslanie zlyhalo");
+  return res.json();
+}

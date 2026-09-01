@@ -1,8 +1,13 @@
 """Patient identity verification — insurance card read + biometric match.
 
-DEMO IMPLEMENTATION. The card read and the face match are simulated locally and are
-labelled as such in every response (`simulated: true`). In production this layer would
-call the eZdravie/NCZI patient index and the insurer's biometric reference service.
+The Slovak preukaz poistenca carries no chip and no NFC: it is a printed plastic card.
+So the read is optical — the card goes under a camera and OCR lifts the name, birth
+number and insurer code off the front. Anything that talks about tapping a chip is
+describing a card Slovakia does not issue.
+
+DEMO IMPLEMENTATION. The OCR and the face match are simulated locally and labelled as
+such in every response (`simulated: true`). In production the OCR runs on-device and
+the record is confirmed against the eZdravie/NCZI patient index.
 """
 from __future__ import annotations
 
@@ -54,7 +59,7 @@ def demo_cards():
 
 @router.post("/card")
 def read_card(req: CardReadRequest):
-    """Simulate an NFC read of the European Health Insurance Card."""
+    """Simulate optically reading the printed front of the insurance card."""
     patient = get_patient(req.card_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Karta poistenca nebola rozpoznaná")
@@ -62,7 +67,8 @@ def read_card(req: CardReadRequest):
     return {
         "simulated": True,
         "read_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "channel": "NFC / ISO 14443-A",
+        "channel": "Optické snímanie (OCR)",
+        "fields_read": ["Meno a priezvisko", "Rodné číslo", "Číslo preukazu", "Kód poisťovne"],
         "card_valid": True,
         "insurance_active": True,
         "patient": {

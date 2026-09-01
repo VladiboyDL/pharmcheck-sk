@@ -54,7 +54,7 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
               onClick={nothingHere}
               className="w-full rounded-2xl border border-slate-700 text-slate-300 text-lg py-4 hover:border-slate-500 active:scale-[0.99] transition"
             >
-              Nič z toho neberiem
+              Nič iné neberiem
             </button>
           )}
         </div>
@@ -63,7 +63,8 @@ export default function KioskQuestions({ group, greeting, answers, onChange, onN
       <div>
         {greeting && (
           <p className="text-center text-lg text-slate-300 mb-5">
-            Vitajte, <span className="text-slate-50 font-semibold">{greeting}</span>. Mám dve otázky.
+            Vitajte, <span className="text-slate-50 font-semibold">{greeting}</span>.{" "}
+            {questions.length === 1 ? "Mám jednu otázku." : `Mám ${questions.length} otázky.`}
           </p>
         )}
 

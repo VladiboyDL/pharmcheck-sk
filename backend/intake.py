@@ -41,10 +41,10 @@ NONE = IntakeOption(id="none", label="Nič z uvedeného", exclusive=True)
 
 QUESTIONS: list[IntakeQuestion] = [
     IntakeQuestion(
-        id="otc_pain",
-        prompt="Užívate niečo na bolesť, čo vám lekár nepredpísal?",
-        short="Beriete niečo na bolesť?",
-        hint="Aj to, čo ste si kúpili v lekárni alebo máte doma v zásobe.",
+        id="other_meds",
+        prompt="Beriete ešte niečo, čo nie je na tomto recepte?",
+        short="Beriete ešte niečo okrem receptu?",
+        hint="Aj lieky z lekárne bez predpisu, vitamíny a bylinky. Väčšina ľudí ich za lieky nepovažuje.",
         group="self_medication",
         multi=True,
         options=[
@@ -53,17 +53,6 @@ QUESTIONS: list[IntakeQuestion] = [
             IntakeOption("aspirin", "Acylpyrín, Aspirín", ["acetylsalicylic acid"], icon="pill"),
             IntakeOption("diclofenac", "Voltaren, Olfen — aj masť", ["diclofenac"], icon="tube"),
             IntakeOption("naproxen", "Aleve, Nalgesin", ["naproxen"], icon="pill"),
-            NONE,
-        ],
-    ),
-    IntakeQuestion(
-        id="supplements",
-        prompt="Beriete výživové doplnky alebo bylinky?",
-        short="A doplnky alebo bylinky?",
-        hint="Aj čaje a kvapky. Väčšina pacientov ich za lieky nepovažuje.",
-        group="self_medication",
-        multi=True,
-        options=[
             IntakeOption("st_johns_wort", "Ľubovník bodkovaný", ["st john's wort"], icon="leaf"),
             IntakeOption("ginkgo", "Ginkgo biloba", ["ginkgo biloba"], icon="leaf"),
             IntakeOption("fish_oil", "Rybí olej, omega-3", ["omega-3 fatty acids"], icon="drop"),
@@ -80,58 +69,6 @@ QUESTIONS: list[IntakeQuestion] = [
             NONE,
         ],
     ),
-    IntakeQuestion(
-        id="other_prescriber",
-        prompt="Predpísal vám niečo iný lekár za posledné 3 mesiace?",
-        short="Boli ste u iného lekára?",
-        hint="Špecialista nevidí, čo napísal obvodný lekár, a naopak.",
-        group="context",
-        multi=False,
-        options=[
-            IntakeOption(
-                "yes", "Áno", [],
-                note="Pacient má recepty od viacerých predpisujúcich. Doplniť zoznam a skontrolovať duplicity — "
-                     "žiadny z lekárov nevidí kompletnú medikáciu.",
-                severity="warning",
-            ),
-            IntakeOption("no", "Nie", []),
-        ],
-    ),
-    IntakeQuestion(
-        id="alcohol",
-        prompt="Pijete alkohol pravidelne?",
-        short="Pijete alkohol pravidelne?",
-        hint="Ovplyvňuje pečeňový metabolizmus aj riziko krvácania.",
-        group="context",
-        multi=False,
-        options=[
-            IntakeOption(
-                "daily", "Denne alebo takmer denne", [],
-                note="Pravidelný alkohol zvyšuje hepatotoxicitu paracetamolu, riziko GIT krvácania pri NSAID "
-                     "a rozkolísava INR pri warfaríne.",
-                severity="warning",
-            ),
-            IntakeOption("occasional", "Príležitostne", []),
-            IntakeOption("no", "Nepijem", []),
-        ],
-    ),
-    IntakeQuestion(
-        id="adherence",
-        prompt="Užívate všetky predpísané lieky tak, ako máte?",
-        short="Beriete lieky podľa predpisu?",
-        hint="Bez výčitiek — vysadené lieky menia interakčný profil.",
-        group="context",
-        multi=False,
-        options=[
-            IntakeOption(
-                "no", "Niečo som vysadil alebo beriem inak", [],
-                note="Pacient neužíva medikáciu podľa predpisu. Zistiť ktorý liek a prečo — "
-                     "dávkovanie sa validovalo voči predpisu, nie voči skutočnosti.",
-                severity="warning",
-            ),
-            IntakeOption("yes", "Áno, podľa predpisu", []),
-        ],
-    ),
 ]
 
 
@@ -139,9 +76,6 @@ def questions_for(patient: dict | None) -> list[dict]:
     """Serialise the interview, tailored to what we already know about the patient."""
     out = []
     for q in QUESTIONS:
-        # Adherence only matters for someone already on chronic therapy.
-        if q.id == "adherence" and not (patient or {}).get("chronic"):
-            continue
         out.append(
             {
                 "id": q.id,

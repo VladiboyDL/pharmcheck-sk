@@ -354,9 +354,14 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
         script.append(
             {
                 "topic": f"{ix['drug_a']} + {ix['drug_b']}",
-                "ask": f"Vie váš lekár, že užívate {ix['drug_a']} aj {ix['drug_b']} súčasne?",
-                "patient": "Tieto dva lieky sa navzájom ovplyvňujú. Preberte to prosím "
-                           "pri najbližšej návšteve u lekára.",
+                "title": f"{ix['drug_a']} a {ix['drug_b']} sa navzájom ovplyvňujú",
+                "kind": "inform",
+                "ask": f"Upozorniť na súbeh {ix['drug_a']} a {ix['drug_b']}.",
+                "patient": (
+                    f"{ix['drug_a']} a {ix['drug_b']} sa navzájom ovplyvňujú. "
+                    "Preberte to s lekárom pri najbližšej návšteve — liek preto vysadzovať netreba."
+                ),
+                "notify_prescriber": ix["severity"] == "Závažná",
                 "say": ix.get("management") or "",
                 "severity": ix["severity"],
             }
@@ -370,8 +375,10 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
             script.append(
                 {
                     "topic": item["trade_name"],
+                    "title": _headline_for(f, item["trade_name"]),
+                    "kind": "ask",
                     "ask": _ask_for(f, item["trade_name"]),
-                    "patient": f.detail,
+                    "patient": _patient_text_for(f, item["trade_name"]),
                     "say": f.action or "",
                     "severity": "Upozornenie",
                 }
@@ -384,8 +391,10 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
         script.append(
             {
                 "topic": ", ".join(f.drugs) if f.drugs else "Celá medikácia",
+                "title": _headline_for(f, ", ".join(f.drugs)),
+                "kind": "ask",
                 "ask": _ask_for(f, ", ".join(f.drugs)),
-                "patient": f.detail,
+                "patient": _patient_text_for(f, ", ".join(f.drugs)),
                 "say": f.action or "",
                 "severity": "Upozornenie",
             }
@@ -398,6 +407,64 @@ def _counselling_script(items, item_findings, regimen_findings, interactions) ->
     return script
 
 
+def _patient_text_for(finding, subject: str) -> str:
+    """The same finding without the clinical vocabulary.
+
+    clinical.py writes for a pharmacist — "kumulatívne riziko krvácania",
+    "hemostáza", "NSAID" — which is right for the console and wrong for the counter.
+    The kiosk gets this instead; the console keeps the original.
+    """
+    by_code = {
+        "DUPLICATE": (
+            f"{subject} účinkujú rovnako. Užívať oboje nepomôže viac, ale zaťažuje žalúdok a obličky."
+        ),
+        "BLEEDING_BURDEN": (
+            f"{subject} spolu zvyšujú sklon ku krvácaniu. Všímajte si modriny, krvácanie ďasien "
+            "alebo tmavú stolicu a ozvite sa lekárovi."
+        ),
+        "SEROTONIN_BURDEN": (
+            f"{subject} sa navzájom zosilňujú. Ak by sa objavil nepokoj, tras, potenie alebo "
+            "zrýchlený pulz, kontaktujte lekára."
+        ),
+        "FALL_RISK": (
+            f"{subject} môžu spôsobiť závrat alebo neistotu pri chôdzi. Vstávajte pomaly, "
+            "hlavne v noci."
+        ),
+        "GERIATRIC": f"{subject} sa vo vyššom veku znáša horšie. Lekár môže zvážiť nižšiu dávku.",
+        "QT": f"{subject} môžu ovplyvniť srdcový rytmus. Pri búšení srdca alebo slabosti volajte lekára.",
+        "RENAL_REDUCE": "Vaše obličky pracujú pomalšie, preto liek potrebuje nižšiu dávku. Overíme to s lekárom.",
+        "RENAL_CAUTION": "Vaše obličky pracujú pomalšie. Lekár by mal ich funkciu pravidelne kontrolovať.",
+        "NEAR_MAX_DOSE": f"{subject} máte na hornej hranici povolenej dávky. Neprikladajte si nič navyše.",
+        "POLYPHARMACY": (
+            "Užívate viac liekov naraz. Oplatí sa raz za čas prejsť si ich s lekárom a vyradiť, "
+            "čo už netreba."
+        ),
+        "UNVERIFIED": (
+            "O jednej kombinácii nemáme dosť údajov, takže ju nevieme potvrdiť ani vylúčiť. "
+            "Spomeňte to lekárovi."
+        ),
+    }
+    return by_code.get(finding.code, finding.detail)
+
+
+def _headline_for(finding, subject: str) -> str:
+    """A short line in the patient's language — never an instruction to staff."""
+    by_code = {
+        "DUPLICATE": "Dva lieky s rovnakým účinkom",
+        "BLEEDING_BURDEN": "Viac liekov, ktoré riedia krv",
+        "SEROTONIN_BURDEN": "Lieky, ktoré sa navzájom zosilňujú",
+        "FALL_RISK": "Lieky, po ktorých môžete byť neistí",
+        "GERIATRIC": f"{subject} vyžaduje opatrnosť",
+        "QT": "Lieky ovplyvňujúce srdcový rytmus",
+        "RENAL_REDUCE": "Dávka podľa vašich obličiek",
+        "RENAL_CAUTION": "Dávka podľa vašich obličiek",
+        "NEAR_MAX_DOSE": f"{subject} je na hornej hranici dávky",
+        "POLYPHARMACY": "Užívate viac liekov naraz",
+        "UNVERIFIED": "Niečo sme nevedeli overiť",
+    }
+    return by_code.get(finding.code, finding.title)
+
+
 def _ask_for(finding, subject: str) -> str:
     """The opening question, phrased for the specific kind of finding."""
     by_code = {
@@ -405,7 +472,7 @@ def _ask_for(finding, subject: str) -> str:
         "FALL_RISK": "Nestalo sa vám v poslednom čase, že by ste zakopli alebo spadli?",
         "BLEEDING_BURDEN": "Nevšimli ste si, že sa vám ľahšie robia modriny alebo dlhšie krváca ranka?",
         "SEROTONIN_BURDEN": "Nemávate nepokoj, tras alebo nadmerné potenie?",
-        "DUPLICATE": f"Viete o tom, že {subject} obsahujú podobnú účinnú látku?",
+        "DUPLICATE": f"Upozorniť, že {subject} obsahujú podobnú účinnú látku — nemá zmysel brať oboje.",
         "RENAL_REDUCE": "Kedy ste mali naposledy kontrolu obličiek?",
         "RENAL_CAUTION": "Kedy ste mali naposledy kontrolu obličiek?",
         "NEAR_MAX_DOSE": f"Beriete {subject} presne podľa predpisu, alebo si niekedy pridáte?",
@@ -413,7 +480,7 @@ def _ask_for(finding, subject: str) -> str:
         "QT": "Nemávate búšenie srdca alebo pocit na odpadnutie?",
         "UNVERIFIED": "Užívate okrem toho ešte niečo, o čom sme sa nebavili?",
     }
-    return by_code.get(finding.code, f"Vie váš lekár o tom, že užívate {subject}?")
+    return by_code.get(finding.code, f"Upozorniť pacienta na {subject}.")
 
 
 def _prescriber_message(problem_items, item_findings, regimen_findings, interactions, patient_name) -> str:
@@ -700,6 +767,7 @@ def verify(req: VerifyRequest):
                 "explanations_pending": sum(1 for i in interactions if not i.get("mechanism")),
             },
             "audit": audit,
+            "prescriber": (scenario or {}).get("prescriber"),
         }
     finally:
         db.close()
@@ -931,5 +999,87 @@ def _load_plan(audit_id: str) -> dict | None:
         return {"patient": row["patient"], "plan": json.loads(row["plan_json"])}
     except Exception:
         return None
+    finally:
+        db.close()
+
+
+# ── Telling the prescriber ────────────────────────────────────────────────────
+
+
+class NotifyPrescriberRequest(BaseModel):
+    audit_id: str
+    prescriber: Optional[str] = None
+    patient: Optional[str] = None
+    subject: str
+    detail: str
+
+
+@router.post("/notify-prescriber")
+def notify_prescriber(req: NotifyPrescriberRequest):
+    """Send the finding back to the doctor who wrote the prescription.
+
+    The evidence for this is better than for anything else the counter can do about
+    an interaction: asynchronous, non-interruptive notifications to the prescriber
+    changed the prescription within seven days in roughly a quarter of cases. Telling
+    the patient to "mention it next time" changes almost nothing by comparison.
+
+    Delivery is out of scope for the demo — production routes this over the national
+    e-prescribing channel, not email. What is real here is the queue and the record.
+    """
+    db = get_db()
+    try:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS prescriber_notifications (
+                id INTEGER PRIMARY KEY,
+                audit_id TEXT,
+                created_at TEXT,
+                prescriber TEXT,
+                patient TEXT,
+                subject TEXT,
+                detail TEXT,
+                delivered INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        db.execute(
+            """INSERT INTO prescriber_notifications
+               (audit_id, created_at, prescriber, patient, subject, detail, delivered)
+               VALUES (?,?,?,?,?,?,0)""",
+            (
+                req.audit_id,
+                time.strftime("%Y-%m-%dT%H:%M:%S"),
+                req.prescriber,
+                req.patient,
+                req.subject,
+                req.detail,
+            ),
+        )
+        db.commit()
+        return {
+            "queued": True,
+            "delivered": False,
+            "simulated": True,
+            "channel": "eRecept — kanál pre správy predpisujúcemu lekárovi",
+            "message": "Správa je pripravená na odoslanie lekárovi.",
+        }
+    finally:
+        db.close()
+
+
+@router.get("/prescriber-notifications")
+def prescriber_notifications(limit: int = 25):
+    """What has been queued back to prescribers — visible in the pharmacist console."""
+    db = get_db()
+    try:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS prescriber_notifications (
+                id INTEGER PRIMARY KEY, audit_id TEXT, created_at TEXT, prescriber TEXT,
+                patient TEXT, subject TEXT, detail TEXT, delivered INTEGER NOT NULL DEFAULT 0)"""
+        )
+        rows = db.execute(
+            """SELECT audit_id, created_at, prescriber, patient, subject, delivered
+               FROM prescriber_notifications ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return {"notifications": [dict(r) for r in rows]}
     finally:
         db.close()
