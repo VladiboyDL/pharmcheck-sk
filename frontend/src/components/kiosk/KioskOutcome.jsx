@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Screen, Title, BigButton, Badge, Rail } from "./KioskShell";
 import TakeAway from "./TakeAway";
 import { notifyPrescriber } from "../../api/client";
@@ -10,7 +10,7 @@ import { notifyPrescriber } from "../../api/client";
  * because two drugs interact. So the patient's first screen is their medicines being
  * ready, and the advice follows one point at a time, in plain language.
  */
-export default function KioskOutcome({ data, onRestart }) {
+export default function KioskOutcome({ data, onRestart, controls }) {
   const [page, setPage] = useState(0);
 
   const takeHome = data.items.filter((i) => i.source !== "interview" && i.status !== "verify");
@@ -52,6 +52,12 @@ export default function KioskOutcome({ data, onRestart }) {
   const pages = 1 + cards.length + 1;
   const next = () => setPage((p) => Math.min(p + 1, pages - 1));
 
+  // The voice agent steps through the same pages the button does.
+  useEffect(() => {
+    if (!controls) return;
+    controls.current = { page, pages, last: page >= pages - 1, next };
+  }, [controls, page, pages]);
+
   // ── Page 0: your medicines ────────────────────────────────────────────────
   if (page === 0) {
     // The take-away screen always follows, even with nothing to warn about — a clean
@@ -77,8 +83,8 @@ export default function KioskOutcome({ data, onRestart }) {
           <Title
             sub={
               held.length
-                ? "Jeden liek si ešte overíme u vášho lekára, ostatné sú pripravené."
-                : "Lieky sú pripravené. Rozpis si o chvíľu odnesiete so sebou."
+                ? "Jeden liek si ešte overíme u vášho lekára, ostatné pripravuje výdajník."
+                : "Výdajník ich pripravuje. Rozpis si o chvíľu odnesiete so sebou."
             }
           >
             {takeHome.length ? "Takto ich budete užívať" : "Musíme sa najprv spojiť s vaším lekárom"}

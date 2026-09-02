@@ -30,6 +30,7 @@ export default function KioskWizard({ onSessionResult }) {
   const [mode, setMode] = useState(null); // null | "voice" | "tap"
   const pending = useRef(null);
   const identityControls = useRef(null);
+  const outcomeControls = useRef(null);
   const voice = useVoiceAgent();
 
   // The agent's tools are registered once at connect time but must see current
@@ -182,6 +183,9 @@ export default function KioskWizard({ onSessionResult }) {
     }
     if (s.result) {
       state.vysledok = s.result.verdict_label;
+      state.priehradka = s.result.compartment ?? null;
+      const o = outcomeControls.current;
+      if (o) state.karta_vysledku = o.last ? "posledna — priehradka a QR" : `${o.page + 1} z ${o.pages}`;
       state.rozpis = (s.result.dosing_plan ?? []).map(
         (e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`
       );
@@ -200,17 +204,15 @@ export default function KioskWizard({ onSessionResult }) {
 
       pokracuj: async () => {
         const before = describeScreen();
-        const note = handlers.current.advance();
-        // Card read and face scan are asynchronous; answering before they finish is how
-        // the agent ends up narrating a step the patient has already passed.
-        // Card read plus face scan runs about 2.5 s; wait well past it rather than
-        // handing the agent a half-finished step.
-        for (let i = 0; i < 45; i++) {
+        const { moved, note } = handlers.current.advance();
+        if (!moved) return `${note} Aktuálny stav: ${before}`;
+        // Card read and face scan are asynchronous, so wait for the screen to actually
+        // change — but the agent's tool call times out at 5 s, so stop well before that
+        // rather than hand back a timeout the agent treats as failure.
+        for (let i = 0; i < 17; i++) {
           await new Promise((r) => setTimeout(r, 200));
           const now = describeScreen();
-          if (now !== before && !JSON.parse(now).cakaj) {
-            return `${note} Aktuálny stav: ${now}`;
-          }
+          if (now !== before && !JSON.parse(now).cakaj) return `${note} Aktuálny stav: ${now}`;
         }
         return `${note} Aktuálny stav: ${describeScreen()}`;
       },
@@ -227,12 +229,21 @@ export default function KioskWizard({ onSessionResult }) {
   // Rebuilt every render, so the tools always act on current state.
   handlers.current = {
     advance: () => {
-      if (phase === "welcome") setPhase("identity");
-      else if (phase === "identity") identityControls.current?.next?.();
-      else if (phase === "questions") nextGroup();
-      else if (phase === "review") showResult();
-      else return "Pacient je na poslednej obrazovke, ďalej to nejde.";
-      return "Posunuté na ďalší krok.";
+      if (phase === "welcome") { setPhase("identity"); return { moved: true, note: "Posunuté na ďalší krok." }; }
+      if (phase === "identity") { identityControls.current?.next?.(); return { moved: true, note: "Posunuté na ďalší krok." }; }
+      if (phase === "questions") {
+        // This is how the question got skipped: a patient who tapped through identity
+        // himself, then an agent calling pokracuj on the question screen. The question
+        // is answered only through zapis_odpoved, never stepped over.
+        return { moved: false, note: "Pacient je na otázke. Nepoužívaj pokracuj — opýtaj sa ho a odpoveď zapíš cez zapis_odpoved (prázdny reťazec, ak nič neužíva)." };
+      }
+      if (phase === "review") { showResult(); return { moved: true, note: "Posunuté na ďalší krok." }; }
+      if (phase === "result") {
+        const o = outcomeControls.current;
+        if (o && !o.last) { o.next(); return { moved: true, note: "Posunuté na ďalšiu kartu výsledku." }; }
+        return { moved: false, note: "Pacient je na poslednej obrazovke — vidí priehradku a QR kód. Rozlúč sa." };
+      }
+      return { moved: false, note: "Ďalej to nejde." };
     },
 
     record: (lieky) => {
@@ -458,7 +469,9 @@ export default function KioskWizard({ onSessionResult }) {
             </Screen>
           )}
 
-          {phase === "result" && result && <KioskOutcome data={result} onRestart={restart} />}
+          {phase === "result" && result && (
+            <KioskOutcome data={result} onRestart={restart} controls={outcomeControls} />
+          )}
         </div>
       </div>
 

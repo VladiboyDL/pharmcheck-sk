@@ -318,7 +318,8 @@ def _next_steps(items, item_findings, regimen_findings, interactions, patient_na
                 "kind": "dispense",
                 "title": f"Vydať {len(goes_out)} z {len(rx)} položiek receptu",
                 "detail": ", ".join(i["trade_name"] for i in goes_out)
-                + ". Recept je platný a vydáva sa — nálezy nižšie sú na poučenie, nie dôvod na odmietnutie.",
+                + ". Recept je platný, výdajník ich pripraví — nálezy nižšie sú na poučenie, "
+                "nie dôvod na odmietnutie.",
                 "drugs": [i["trade_name"] for i in goes_out],
             }
         )
@@ -781,6 +782,9 @@ def verify(req: VerifyRequest, request: Request):
         # A ten-hex audit id is fine for a console row but far too guessable for a
         # public link to someone's medication. The QR uses this instead.
         plan_token = security.public_token()
+        # Which drawer the robot loaded. Deterministic from the audit id so every
+        # surface names the same one.
+        compartment = f"{'ABCDEFGH'[int(uuid.uuid4().hex[:2], 16) % 8]}{int(uuid.uuid4().hex[:2], 16) % 9 + 1}"
         audit = {
             "audit_id": f"AV-{uuid.uuid4().hex[:10].upper()}",
             "plan_token": plan_token,
@@ -841,6 +845,7 @@ def verify(req: VerifyRequest, request: Request):
             "audit": audit,
             "prescriber": (scenario or {}).get("prescriber"),
             "plan_token": plan_token,
+            "compartment": compartment if dispensable else None,
         }
     finally:
         db.close()

@@ -49,11 +49,32 @@ export default function TakeAway({ data, onDone }) {
   return (
     <div className="min-h-[34rem] flex flex-col">
       <div className="flex-1 flex flex-col justify-center text-center">
-        <h2 className="text-3xl font-bold text-txt tracking-tight">Vezmite si rozpis so sebou</h2>
-        <p className="mt-3 text-base text-txt2 max-w-md mx-auto">
-          Naskenujte kód telefónom. Rozpis si uložíte a môžete si z neho nastaviť
-          denné pripomienky.
-        </p>
+        {data.compartment ? (
+          <>
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-txt3">
+              Lieky sú pripravené
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold text-txt tracking-tighter2">
+              Priehradka{" "}
+              <span className="inline-block rounded-sm2 bg-brand px-3 py-1 font-mono text-ink">
+                {data.compartment}
+              </span>
+            </h2>
+            <p className="mt-4 text-base text-txt2 max-w-md mx-auto">
+              Otvorí sa sama. Rozpis užívania si vezmite so sebou — naskenujte kód telefónom.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="text-3xl font-semibold text-txt tracking-tighter2">
+              Vezmite si rozpis so sebou
+            </h2>
+            <p className="mt-4 text-base text-txt2 max-w-md mx-auto">
+              Naskenujte kód telefónom. Rozpis si uložíte a môžete si z neho nastaviť
+              denné pripomienky.
+            </p>
+          </>
+        )}
 
         <div className="mt-7 mx-auto rounded-card border border-hairline bg-surface p-4">
           <canvas ref={canvasRef} aria-label="QR kód s rozpisom liekov" />
