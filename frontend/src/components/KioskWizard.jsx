@@ -28,6 +28,7 @@ export default function KioskWizard({ onSessionResult }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null); // null | "voice" | "tap"
+  const [screenTick, setScreenTick] = useState(0);
   const pending = useRef(null);
   const identityControls = useRef(null);
   const outcomeControls = useRef(null);
@@ -102,13 +103,29 @@ export default function KioskWizard({ onSessionResult }) {
     };
   }, [phase, restart]);
 
-  /** Fire the check now; the prescription screen covers its latency. */
+  /**
+   * Voice mode only chooses the mode. The agent is not connected yet: it joins after
+   * the card and the face, once the kiosk knows who is standing there — so it greets
+   * the patient by name and starts at the one question, instead of guessing at a
+   * screen it has never seen and making the patient narrate it.
+   */
   function startVoice() {
     setMode("voice");
     setPhase("identity");
-    voice.start({ clientTools });
   }
 
+  /** The agent joins with the verified patient and the actual prescription. */
+  function startAgent(id) {
+    const preview = scenario?.preview ?? [];
+    voice.start({
+      clientTools,
+      patientName: id?.patient?.name,
+      medicines: preview.map((i) => i.trade_name).join(", "),
+      schedule: preview.map((i) => `${i.trade_name}: ${i.schedule}`).join("; "),
+    });
+  }
+
+  /** Fire the check now; the prescription screen covers its latency. */
   function startCheck(finalAnswers) {
     setError(null);
     const request = verifyDispense({
@@ -298,11 +315,21 @@ export default function KioskWizard({ onSessionResult }) {
         ? `Zapísané: ${matchedLabels.join(", ")}.`
         : "Nič z povedaného nezodpovedá možnostiam na obrazovke.";
       if (unmatched.length) {
-        msg += ` Toto v zozname nemám: ${unmatched.join(", ")} — povedz pacientovi, že to odovzdáš lekárnikovi.`;
+        msg += ` Toto v zozname nemám: ${unmatched.join(", ")} — povedz pacientovi, že to odovzdáš obsluhe lekárne.`;
       }
       return msg + " Teraz je pacient na kroku recept.";
     },
   };
+
+  // The agent must never depend on the patient telling it what the screen shows.
+  // Every change of step is pushed to it the moment it happens — including the ones
+  // the patient makes by tapping while the agent is still talking.
+  const voiceLive = voice.status === "live";
+  const voiceSay = voice.say;
+  useEffect(() => {
+    if (!voiceLive) return;
+    voiceSay(`Obrazovka sa práve zmenila. Aktuálny stav: ${describeScreen()}`);
+  }, [voiceLive, voiceSay, describeScreen, phase, groupIndex, result, screenTick]);
 
   // Dev only: the agent drives the kiosk through these, and a browser pane cannot
   // grant a microphone — so exposing them is the only way to exercise the voice path
@@ -352,7 +379,7 @@ export default function KioskWizard({ onSessionResult }) {
           muted={voice.muted}
           level={voice.level}
           onToggleMute={voice.toggleMute}
-          onRetry={() => voice.start({ patientName: identity?.patient?.name })}
+          onRetry={() => startAgent(identity)}
         />
 
         {/* Where am I, how much is left */}
@@ -406,7 +433,7 @@ export default function KioskWizard({ onSessionResult }) {
                     <path strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 003 9c0 5.6 3.8 10.3 9 11.6 5.2-1.3 9-6 9-11.6 0-1-.1-2-.4-3z" />
                   </svg>
                 </div>
-                <Title sub="Môžem vás previesť hlasom, alebo si všetko odkliknete sami. Obe cesty trvajú asi minútu a pol.">
+                <Title sub="Hlasom sa nemusíte dotknúť obrazovky. Alebo si všetko odkliknete sami. Obe cesty trvajú asi minútu a pol.">
                   Dobrý deň
                 </Title>
               </div>
@@ -416,9 +443,11 @@ export default function KioskWizard({ onSessionResult }) {
           {phase === "identity" && (
             <KioskIdentity
               controls={identityControls}
+              auto={mode === "voice"}
               onDone={(id) => {
                 setIdentity(id);
                 setPhase("questions");
+                if (mode === "voice") startAgent(id);
               }}
             />
           )}
@@ -470,7 +499,12 @@ export default function KioskWizard({ onSessionResult }) {
           )}
 
           {phase === "result" && result && (
-            <KioskOutcome data={result} onRestart={restart} controls={outcomeControls} />
+            <KioskOutcome
+              data={result}
+              onRestart={restart}
+              controls={outcomeControls}
+              onPageChange={() => setScreenTick((t) => t + 1)}
+            />
           )}
         </div>
       </div>

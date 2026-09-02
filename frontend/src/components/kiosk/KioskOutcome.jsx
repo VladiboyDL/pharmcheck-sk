@@ -10,7 +10,7 @@ import { notifyPrescriber } from "../../api/client";
  * because two drugs interact. So the patient's first screen is their medicines being
  * ready, and the advice follows one point at a time, in plain language.
  */
-export default function KioskOutcome({ data, onRestart, controls }) {
+export default function KioskOutcome({ data, onRestart, controls, onPageChange }) {
   const [page, setPage] = useState(0);
 
   const takeHome = data.items.filter((i) => i.source !== "interview" && i.status !== "verify");
@@ -56,6 +56,9 @@ export default function KioskOutcome({ data, onRestart, controls }) {
   useEffect(() => {
     if (!controls) return;
     controls.current = { page, pages, last: page >= pages - 1, next };
+    onPageChange?.(page);
+    // onPageChange is a fresh arrow each render; it only needs to fire per page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controls, page, pages]);
 
   // ── Page 0: your medicines ────────────────────────────────────────────────

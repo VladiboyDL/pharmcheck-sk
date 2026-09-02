@@ -10,7 +10,7 @@ import { Screen, Title, BigButton } from "./KioskShell";
  * number and insurer code off the front. Starting the camera here also gets the
  * permission prompt out of the way before it can interrupt the face step.
  */
-export default function KioskIdentity({ onDone, controls }) {
+export default function KioskIdentity({ onDone, controls, auto = false }) {
   const [cards, setCards] = useState([]);
   const [stage, setStage] = useState("card"); // card | reading | face | scanning
   const [patient, setPatient] = useState(null);
@@ -84,6 +84,19 @@ export default function KioskIdentity({ onDone, controls }) {
 
   const card = cards[0];
 
+  // Hands-free: a real reader fires when the card lands on it and a real camera
+  // verifies when a face is in frame. In voice mode the kiosk behaves the same way,
+  // so the patient never touches the screen — the button is the tap-mode stand-in.
+  useEffect(() => {
+    if (!auto) return;
+    let timer;
+    if (stage === "card" && card) timer = setTimeout(() => scanCard(card.card_id), 1800);
+    else if (stage === "face") timer = setTimeout(scanFace, 1400);
+    return () => clearTimeout(timer);
+    // scanCard/scanFace are stable closures over state that the deps already cover.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, stage, card]);
+
   // The voice agent advances the same actions the buttons do — one code path, so the
   // two modes can never drift apart.
   useEffect(() => {
@@ -106,14 +119,18 @@ export default function KioskIdentity({ onDone, controls }) {
     return (
       <Screen
         footer={
-          <BigButton
-            onClick={() => card && scanCard(card.card_id)}
-            disabled={!card || stage === "reading"}
-            tone="ghost"
-            full
-          >
-            {stage === "reading" ? "Čítam kartu…" : "Simulovať priloženie karty"}
-          </BigButton>
+          auto ? (
+            <AutoHint>{stage === "reading" ? "Čítam kartu…" : "Čítačka je zapnutá"}</AutoHint>
+          ) : (
+            <BigButton
+              onClick={() => card && scanCard(card.card_id)}
+              disabled={!card || stage === "reading"}
+              tone="ghost"
+              full
+            >
+              {stage === "reading" ? "Čítam kartu…" : "Simulovať priloženie karty"}
+            </BigButton>
+          )
         }
       >
         <div className="flex flex-col items-center">
@@ -150,9 +167,15 @@ export default function KioskIdentity({ onDone, controls }) {
   return (
     <Screen
       footer={
-        <BigButton onClick={scanFace} disabled={stage === "scanning"} full>
-          {stage === "scanning" ? `Overujem… ${score.toFixed(0)} %` : "Overiť totožnosť"}
-        </BigButton>
+        auto ? (
+          <AutoHint>
+            {stage === "scanning" ? `Overujem… ${score.toFixed(0)} %` : "Kamera je zapnutá"}
+          </AutoHint>
+        ) : (
+          <BigButton onClick={scanFace} disabled={stage === "scanning"} full>
+            {stage === "scanning" ? `Overujem… ${score.toFixed(0)} %` : "Overiť totožnosť"}
+          </BigButton>
+        )
       }
     >
       <div className="flex flex-col items-center">
@@ -182,6 +205,16 @@ export default function KioskIdentity({ onDone, controls }) {
       </div>
       <style>{`@keyframes kioskSweep{0%{top:12%}50%{top:84%}100%{top:12%}}`}</style>
     </Screen>
+  );
+}
+
+/** What stands in for the button when the hardware acts on its own. */
+function AutoHint({ children }) {
+  return (
+    <div className="flex items-center justify-center gap-2.5 rounded-pill border border-hairline bg-surface py-4 text-txt2 text-base">
+      <span className="w-2 h-2 rounded-full bg-brand animate-pulse" aria-hidden="true" />
+      {children}
+    </div>
   );
 }
 

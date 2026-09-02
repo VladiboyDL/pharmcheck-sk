@@ -59,8 +59,12 @@ def session(req: SessionRequest, request: Request):
     # Every signed URL is a paid conversation; without a cap anyone can drain the quota.
     security.rate_limit(request, "voice", limit=10, window_secs=300)
     api_key, agent_id = _config()
+    # The first message is a fixed template, so the salutation has to arrive ready-made:
+    # ", Vladimír" when the name is known, nothing when it is not.
+    first_name = (req.patient_name or "").strip().split(" ")[0]
     variables = {
         "patient_name": req.patient_name or "pacient",
+        "greeting_name": f", {first_name}" if first_name else "",
         "medicines": req.medicines or "",
         "schedule": req.schedule or "",
         "findings": req.findings or "",

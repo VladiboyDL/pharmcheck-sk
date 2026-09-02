@@ -1093,11 +1093,13 @@ PLAN_PAGE = """<!doctype html>
           color:#fff; text-align:center; font-weight:600; text-decoration:none; }}
   @media (prefers-color-scheme: dark) {{ .cta {{ background:#47c295; color:#08110d; }} }}
   footer {{ margin-top:2rem; font-size:.78rem; opacity:.55; }}
+  .hint {{ margin-top:.75rem; font-size:.8rem; opacity:.6; }}
   @media print {{ .cta {{ display:none; }} body {{ background:#fff; color:#000; }} }}
 </style></head><body>
 <header><h1>Rozpis liekov</h1><p class="who">{name}</p></header>
 <ul>{rows}</ul>
 <a class="cta" href="/api/dispense/plan/{token}.ics">Pridať pripomienky do kalendára</a>
+<p class="hint">Telefón otvorí súbor s pripomienkami (lieky.ics) — potvrďte pridanie do kalendára.</p>
 <footer>Vygenerované systémom AvatarAI Dispense. Nenahrádza pokyny lekára ani lekárnika.</footer>
 </body></html>"""
 
