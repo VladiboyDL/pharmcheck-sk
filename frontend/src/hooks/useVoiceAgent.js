@@ -84,7 +84,18 @@ export default function useVoiceAgent() {
           // snapshot taken before the patient had even tapped their card.
           clientTools,
           onModeChange: ({ mode }) => setSpeaking(mode === "speaking"),
-          onStatusChange: ({ status: s }) => setStatus(s === "connected" ? "live" : s),
+          // When the agent ends the call itself (the patient said goodbye), the strip
+          // disappears instead of reporting a disconnect nobody caused.
+          onStatusChange: ({ status: s }) => {
+            if (s === "connected") setStatus("live");
+            else if (s === "disconnected") {
+              cancelAnimationFrame(frameRef.current);
+              conversationRef.current = null;
+              setSpeaking(false);
+              setLevel(0);
+              setStatus("idle");
+            } else setStatus(s);
+          },
           onError: () => setStatus("error"),
         });
 

@@ -258,7 +258,7 @@ export default function KioskWizard({ onSessionResult }) {
       if (phase === "result") {
         const o = outcomeControls.current;
         if (o && !o.last) { o.next(); return { moved: true, note: "Posunuté na ďalšiu kartu výsledku." }; }
-        return { moved: false, note: "Pacient je na poslednej obrazovke — vidí priehradku a QR kód. Rozlúč sa." };
+        return { moved: false, note: "Pacient je na poslednej obrazovke — vidí priehradku a QR kód. Rozlúč sa a ukonči hovor cez end_call." };
       }
       return { moved: false, note: "Ďalej to nejde." };
     },
@@ -309,7 +309,16 @@ export default function KioskWizard({ onSessionResult }) {
       startCheck(merged);
       setPhase("review");
 
-      const unmatched = spoken.filter((p) => !usedPhrases.has(p));
+      // The agent sends option labels verbatim, and labels contain commas — so the
+      // split above turns "Rybí olej, omega-3" into two phrases. A phrase counts as
+      // understood if any option on the screen covers it, not only the one that was
+      // credited with the match.
+      const allOptionWords = group.questions.flatMap((q) => q.options.map((o) => words(o.label)));
+      const unmatched = spoken.filter(
+        (p) =>
+          !usedPhrases.has(p) &&
+          !allOptionWords.some((ow) => words(p).some((w) => ow.some((x) => x.includes(w) || w.includes(x))))
+      );
       if (!spoken.length) return "Zapísané, že pacient neužíva nič okrem receptu. Teraz je na kroku recept.";
       let msg = matchedLabels.length
         ? `Zapísané: ${matchedLabels.join(", ")}.`
