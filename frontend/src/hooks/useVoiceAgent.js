@@ -44,8 +44,16 @@ export default function useVoiceAgent() {
     };
   }, []);
 
-  /** Real output levels from the agent's own stream — not a random walk. */
-  const trackLevel = useCallback(() => {
+  /**
+   * Real output levels from the agent's own stream — not a random walk.
+   *
+   * The same loop watches the microphone. A live microphone always carries a noise
+   * floor; a track the browser or the OS has silently killed reads exactly zero. The
+   * last live run died that way and the kiosk kept saying "Počúvam" for a minute,
+   * so ten seconds of pure zero now ends the session and tells the patient.
+   */
+  const trackLevel = useCallback((textOnly) => {
+    let lastSignalAt = performance.now();
     const tick = () => {
       const conversation = conversationRef.current;
       if (conversation) {
@@ -57,6 +65,22 @@ export default function useVoiceAgent() {
         } catch {
           setLevel(0);
         }
+        if (!textOnly) {
+          try {
+            if (conversation.getInputVolume() > 0) lastSignalAt = performance.now();
+          } catch {
+            lastSignalAt = performance.now();
+          }
+          if (performance.now() - lastSignalAt > 10000) {
+            conversationRef.current = null;
+            conversation.endSession().catch(() => {});
+            setSpeaking(false);
+            setLevel(0);
+            setProblem("Mikrofón sa odmlčal");
+            setStatus("error");
+            return;
+          }
+        }
       }
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -64,7 +88,7 @@ export default function useVoiceAgent() {
   }, []);
 
   const start = useCallback(
-    async ({ clientTools, firstMessage, ...context } = {}) => {
+    async ({ clientTools, firstMessage, textOnly = false, ...context } = {}) => {
       if (conversationRef.current) return;
       setStatus("connecting");
       setProblem(null);
@@ -85,6 +109,9 @@ export default function useVoiceAgent() {
           // get-signed-url mints a WebSocket URL; WebRTC needs a conversation token
           // from a different endpoint, so the transport has to match what we asked for.
           connectionType: "websocket",
+          // Text mode is for the harness only: the real agent, the real tools, the real
+          // screen — typed instead of spoken, because a browser pane has no microphone.
+          textOnly,
           dynamicVariables: session.dynamic_variables,
           // The agent reads and drives the kiosk through these rather than through a
           // snapshot taken before the patient had even tapped their card.
@@ -104,7 +131,8 @@ export default function useVoiceAgent() {
           // and a minute later the server closed the socket. If the model skips a
           // turn, a nudge after twelve quiet seconds makes it answer instead of
           // leaving the patient talking to a wall. Fires at most once per patient turn.
-          onMessage: ({ source }) => {
+          onMessage: ({ source, message }) => {
+            if (import.meta.env.DEV) window.__voiceLog?.push({ source, message, at: Date.now() });
             clearTimeout(watchdogRef.current);
             if (source !== "user") return;
             watchdogRef.current = setTimeout(() => {
@@ -142,7 +170,7 @@ export default function useVoiceAgent() {
 
         conversationRef.current = conversation;
         setStatus("live");
-        trackLevel();
+        trackLevel(textOnly);
       } catch {
         setStatus("error");
       }
@@ -157,6 +185,20 @@ export default function useVoiceAgent() {
     } catch {
       /* voice is additive — never let it break the flow */
     }
+  }, []);
+
+  // Dev only: lets the harness type to the agent and read what came back.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__voiceLog = [];
+    window.__kioskVoice = {
+      send: (text) => conversationRef.current?.sendUserMessage(text),
+      live: () => Boolean(conversationRef.current),
+    };
+    return () => {
+      delete window.__kioskVoice;
+      delete window.__voiceLog;
+    };
   }, []);
 
   const toggleMute = useCallback(() => {

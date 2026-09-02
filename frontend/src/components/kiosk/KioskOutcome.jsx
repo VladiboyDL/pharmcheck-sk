@@ -55,11 +55,20 @@ export default function KioskOutcome({ data, onRestart, controls, onPageChange }
   // The voice agent steps through the same pages the button does.
   useEffect(() => {
     if (!controls) return;
-    controls.current = { page, pages, last: page >= pages - 1, next };
+    // What the card in front of the patient says, so the agent talks about that
+    // card and not about whichever one it imagines.
+    const card = cards[page - 1];
+    const content =
+      page === 0
+        ? "lieky z receptu a rozpis užívania"
+        : page >= pages - 1
+        ? "priehradka s liekmi a QR kód s rozpisom"
+        : `${card?.headline ?? ""}: ${card?.body ?? ""}`.trim();
+    controls.current = { page, pages, last: page >= pages - 1, next, content };
     onPageChange?.(page);
     // onPageChange is a fresh arrow each render; it only needs to fire per page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controls, page, pages]);
+  }, [controls, page, pages, cards]);
 
   // ── Page 0: your medicines ────────────────────────────────────────────────
   if (page === 0) {

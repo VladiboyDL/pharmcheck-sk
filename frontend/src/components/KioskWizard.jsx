@@ -119,6 +119,8 @@ export default function KioskWizard({ onSessionResult }) {
     const preview = scenario?.preview ?? [];
     voice.start({
       clientTools,
+      // Harness switch: a typed conversation with the real agent (dev builds only).
+      textOnly: import.meta.env.DEV && window.localStorage.getItem("kioskTextVoice") === "1",
       // A dropped call must not restart the greeting and the question from scratch.
       firstMessage: reconnect
         ? "Prepáčte, na chvíľu som vypadla. Pozriem sa, kde sme skončili, a pokračujeme."
@@ -206,7 +208,10 @@ export default function KioskWizard({ onSessionResult }) {
       state.vysledok = s.result.verdict_label;
       state.priehradka = s.result.compartment ?? null;
       const o = outcomeControls.current;
-      if (o) state.karta_vysledku = o.last ? "posledna — priehradka a QR" : `${o.page + 1} z ${o.pages}`;
+      if (o) {
+        state.karta_vysledku = o.last ? "posledna — priehradka a QR" : `${o.page + 1} z ${o.pages}`;
+        state.karta_obsah = o.content;
+      }
       state.rozpis = (s.result.dosing_plan ?? []).map(
         (e) => `${e.trade_name}: ${e.schedule}${e.when ? " " + e.when : ""}`
       );
