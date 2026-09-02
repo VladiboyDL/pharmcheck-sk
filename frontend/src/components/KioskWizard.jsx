@@ -115,10 +115,14 @@ export default function KioskWizard({ onSessionResult }) {
   }
 
   /** The agent joins with the verified patient and the actual prescription. */
-  function startAgent(id) {
+  function startAgent(id, { reconnect = false } = {}) {
     const preview = scenario?.preview ?? [];
     voice.start({
       clientTools,
+      // A dropped call must not restart the greeting and the question from scratch.
+      firstMessage: reconnect
+        ? "Prepáčte, na chvíľu som vypadla. Pozriem sa, kde sme skončili, a pokračujeme."
+        : undefined,
       patientName: id?.patient?.name,
       medicines: preview.map((i) => i.trade_name).join(", "),
       schedule: preview.map((i) => `${i.trade_name}: ${i.schedule}`).join("; "),
@@ -266,13 +270,23 @@ export default function KioskWizard({ onSessionResult }) {
     record: (lieky) => {
       const group = groups[groupIndex];
       if (!group) return "Pacient práve nie je na otázke, nedá sa nič zapísať.";
+      // Recording twice would restart the check and throw the patient back to the
+      // prescription screen from wherever they are.
+      if (phase !== "questions") {
+        return `Otázka je už zodpovedaná, nezapisuj znova. Pacient je na kroku ${
+          { review: "recept", result: "vysledok" }[phase] ?? phase
+        }.`;
+      }
 
       // The patient speaks freely — "omega tri mastné kyseliny" has to find the option
       // labelled "Rybí olej, omega-3". Whole-phrase matching never would.
+      // "Nič z uvedeného" is the screen's own "nothing" option, and the agent sends it
+      // verbatim; "nič"/"žiadne" is how a patient says it. None of those are substances.
       const spoken = String(lieky || "")
         .split(/[;,]/)
         .map((x) => x.trim().toLowerCase())
-        .filter(Boolean);
+        .filter(Boolean)
+        .filter((x) => !/^(nič|nic|žiadne|ziadne|nie)(\s|$)/.test(x));
       // "Vitamín D" must not match the option "Vitamín K" — the letter is the whole
       // distinction, and K interacts with warfarin where D does not. So the letter is
       // folded into the token before anything is compared.
@@ -387,8 +401,9 @@ export default function KioskWizard({ onSessionResult }) {
           speaking={voice.speaking}
           muted={voice.muted}
           level={voice.level}
+          problem={voice.problem}
           onToggleMute={voice.toggleMute}
-          onRetry={() => startAgent(identity)}
+          onRetry={() => startAgent(identity, { reconnect: true })}
         />
 
         {/* Where am I, how much is left */}

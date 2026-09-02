@@ -15,15 +15,20 @@ export default function useVoiceAgent() {
   const [speaking, setSpeaking] = useState(false);
   const [muted, setMuted] = useState(false);
   const [level, setLevel] = useState(0);
+  const [problem, setProblem] = useState(null); // why the voice dropped, in the patient's words
   const conversationRef = useRef(null);
   const frameRef = useRef(null);
+  const watchdogRef = useRef(null);
+  const speakingRef = useRef(false);
 
   const stop = useCallback(async () => {
     cancelAnimationFrame(frameRef.current);
+    clearTimeout(watchdogRef.current);
     const conversation = conversationRef.current;
     conversationRef.current = null;
     setSpeaking(false);
     setLevel(0);
+    setProblem(null);
     setStatus("idle");
     if (conversation) await conversation.endSession().catch(() => {});
   }, []);
@@ -59,9 +64,10 @@ export default function useVoiceAgent() {
   }, []);
 
   const start = useCallback(
-    async ({ clientTools, ...context } = {}) => {
+    async ({ clientTools, firstMessage, ...context } = {}) => {
       if (conversationRef.current) return;
       setStatus("connecting");
+      setProblem(null);
       try {
         const session = await openVoiceSession(context);
         if (!session.enabled || !session.signed_url) {
@@ -83,20 +89,55 @@ export default function useVoiceAgent() {
           // The agent reads and drives the kiosk through these rather than through a
           // snapshot taken before the patient had even tapped their card.
           clientTools,
-          onModeChange: ({ mode }) => setSpeaking(mode === "speaking"),
-          // When the agent ends the call itself (the patient said goodbye), the strip
-          // disappears instead of reporting a disconnect nobody caused.
+          // On a reconnect the agent must not greet and ask the question again.
+          ...(firstMessage ? { overrides: { agent: { firstMessage } } } : {}),
+          onModeChange: ({ mode }) => {
+            speakingRef.current = mode === "speaking";
+            setSpeaking(speakingRef.current);
+          },
           onStatusChange: ({ status: s }) => {
             if (s === "connected") setStatus("live");
-            else if (s === "disconnected") {
-              cancelAnimationFrame(frameRef.current);
-              conversationRef.current = null;
-              setSpeaking(false);
-              setLevel(0);
-              setStatus("idle");
-            } else setStatus(s);
+            else if (s !== "disconnected") setStatus(s);
+            // "disconnected" is handled in onDisconnect, which knows why.
           },
-          onError: () => setStatus("error"),
+          // The last live test died in silence: the patient spoke, nothing came back,
+          // and a minute later the server closed the socket. If the model skips a
+          // turn, a nudge after twelve quiet seconds makes it answer instead of
+          // leaving the patient talking to a wall. Fires at most once per patient turn.
+          onMessage: ({ source }) => {
+            clearTimeout(watchdogRef.current);
+            if (source !== "user") return;
+            watchdogRef.current = setTimeout(() => {
+              const c = conversationRef.current;
+              if (!c || speakingRef.current) return;
+              try {
+                c.sendUserMessage("(Pacient čaká na odpoveď. Zisti stav obrazovky a pokračuj.)");
+              } catch {
+                /* voice is additive */
+              }
+            }, 12000);
+          },
+          onDisconnect: (details) => {
+            cancelAnimationFrame(frameRef.current);
+            clearTimeout(watchdogRef.current);
+            conversationRef.current = null;
+            setSpeaking(false);
+            setLevel(0);
+            // The agent hanging up after the goodbye is the happy path — the strip just
+            // goes away. Anything else is a drop the patient has to be told about,
+            // because otherwise they keep talking to a screen that no longer listens.
+            const clean = details?.reason === "user" || (details?.reason === "agent" && (details.closeCode ?? 1000) === 1000);
+            if (clean) {
+              setStatus("idle");
+            } else {
+              setProblem("Hlas sa prerušil");
+              setStatus("error");
+            }
+          },
+          onError: () => {
+            setProblem("Hlas sa prerušil");
+            setStatus("error");
+          },
         });
 
         conversationRef.current = conversation;
@@ -130,5 +171,5 @@ export default function useVoiceAgent() {
     });
   }, []);
 
-  return { available, status, speaking, muted, level, start, stop, say, toggleMute };
+  return { available, status, speaking, muted, level, problem, start, stop, say, toggleMute };
 }

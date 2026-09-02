@@ -6,7 +6,7 @@
  * hides itself entirely when voice is unavailable — dead controls are worse than
  * no controls.
  */
-export default function VoiceBar({ status, speaking, muted, level, onToggleMute, onRetry }) {
+export default function VoiceBar({ status, speaking, muted, level, problem, onToggleMute, onRetry }) {
   if (status === "idle") return null;
 
   const connecting = status === "connecting";
@@ -26,7 +26,7 @@ export default function VoiceBar({ status, speaking, muted, level, onToggleMute,
         <Meter level={muted ? 0 : level} active={speaking && !muted} connecting={connecting} />
         <span className={`text-[11px] ${speaking && !muted ? "text-brand" : "text-txt3"}`}>
           {failed
-            ? "Hlas nedostupný"
+            ? problem ?? "Hlas nedostupný"
             : connecting
             ? "Pripájam…"
             : muted
@@ -40,9 +40,12 @@ export default function VoiceBar({ status, speaking, muted, level, onToggleMute,
       <div className="flex-1" />
 
       {failed ? (
-        <button onClick={onRetry} className="text-[11px] text-txt3 hover:text-txt2">
-          skúsiť znova
-        </button>
+        <span className="flex items-center gap-3 text-[11px] text-txt3">
+          <span>klikajte ďalej</span>
+          <button onClick={onRetry} className="text-txt2 hover:text-txt underline underline-offset-2">
+            alebo skúsiť znova
+          </button>
+        </span>
       ) : (
         <button
           onClick={onToggleMute}
